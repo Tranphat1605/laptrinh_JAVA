@@ -88,10 +88,11 @@
 
 Phân công này cho phép A, B, C làm việc song song gần như độc lập sau khi thống nhất interface, còn D sẽ bắt đầu sau nhưng có thể dùng dữ liệu giả để thiết kế giao diện trước khi có service thật. Nếu có thành viên mạnh về full-stack, có thể linh hoạt đổi vai trò. Chúc nhóm bạn triển khai suôn sẻ!
 
-
 Tables DB, run on SSMS
 
 -- 1. Xóa các bảng cũ nếu tồn tại (theo thứ tự để không bị lỗi khóa ngoại)
+
+CREATE DATABASE DCPNDB;
 DROP TABLE IF EXISTS EvaluationResult;
 DROP TABLE IF EXISTS Submission;
 DROP TABLE IF EXISTS TestCase;
@@ -137,7 +138,7 @@ CREATE TABLE EvaluationResult (
   actualOutput NVARCHAR(MAX),
   executionTimeMs BIGINT,
   CONSTRAINT FK_Eval_Submission FOREIGN KEY (submissionId) REFERENCES Submission(id) ON DELETE CASCADE,
-  CONSTRAINT FK_Eval_TestCase FOREIGN KEY (testcaseId) REFERENCES TestCase(id) NO ACTION
+  CONSTRAINT FK_Eval_TestCase FOREIGN KEY (testcaseId) REFERENCES TestCase(id) ON DELETE NO ACTION
 );
 
 CREATE TABLE SampleCode (
@@ -156,5 +157,3 @@ CREATE TABLE Checker (
   language NVARCHAR(64),
   CONSTRAINT FK_Checker_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE
 );
-
-
