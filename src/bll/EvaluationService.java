@@ -144,11 +144,16 @@ public class EvaluationService {
      * Chuẩn hóa: xóa khoảng trắng thừa cuối dòng và các dòng trống ở cuối
      */
     private String normalizeString(String input) {
-        String[] lines = input.split("\n");
+        if (input == null) {
+            return "";
+        }
+        // Chuẩn hóa tất cả các loại xuống dòng (\r\n, \r) thành \n
+        String normalized = input.replace("\r\n", "\n").replace("\r", "\n");
+        String[] lines = normalized.split("\n", -1);
         StringBuilder sb = new StringBuilder();
         for (String line : lines) {
-            sb.append(line.stripTrailing()).append("\n"); // Trim phải cho từng dòng
+            sb.append(line.stripTrailing()).append("\n"); // Trim từng dòng
         }
-        return sb.toString().stripTrailing(); // Trim phải cho cả đoạn
+        return sb.toString().stripTrailing(); // Trim toàn bộ đoạn văn bản cuối cùng để bỏ dòng trống thừa
     }
 }

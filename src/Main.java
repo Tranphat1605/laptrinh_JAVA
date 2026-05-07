@@ -1,56 +1,77 @@
-//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
+import bll.EvaluationService;
+import entity.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
 public class Main {
     public static void main(String[] args) {
-        System.out.println("=== BẮT ĐẦU TEST CHỨC NĂNG CHẠY CODE JAVA ===");
+        System.out.println("=== KHỞI CHẠY KIỂM THỬ TỰ ĐỘNG - MODULE CHẤM CODE ===");
+
+        // 1. Tạo danh sách Testcases giả lập cho bài toán: Nhân đôi số nguyên đầu vào
+        List<TestCase> testCases = new ArrayList<>();
+        testCases.add(new TestCase(1, 101, "5\n", "10", false, "Normal"));
+        testCases.add(new TestCase(2, 101, "12\n", "24", false, "Normal"));
+
+        // 2. Tạo danh sách các Code mẫu thí sinh nộp thử
+        List<SampleCode> sampleCodes = new ArrayList<>();
+
+        // Code mẫu 1: Chạy hoàn toàn ĐÚNG (AC - Accepted)
+        String correctJavaCode = 
+            "import java.util.Scanner;\n" +
+            "public class Main {\n" +
+            "    public static void main(String[] args) {\n" +
+            "        Scanner sc = new Scanner(System.in);\n" +
+            "        if (sc.hasNextInt()) {\n" +
+            "            int n = sc.nextInt();\n" +
+            "            System.out.println(n * 2);\n" +
+            "        }\n" +
+            "    }\n" +
+            "}\n";
+        sampleCodes.add(new SampleCode(correctJavaCode, "java", "AC"));
+
+        // Code mẫu 2: Chạy SAI logic kết quả (WA - Wrong Answer) - Cố tình nhân 3 thay vì nhân 2
+        String wrongJavaCode = 
+            "import java.util.Scanner;\n" +
+            "public class Main {\n" +
+            "    public static void main(String[] args) {\n" +
+            "        Scanner sc = new Scanner(System.in);\n" +
+            "        if (sc.hasNextInt()) {\n" +
+            "            int n = sc.nextInt();\n" +
+            "            System.out.println(n * 3);\n" +
+            "        }\n" +
+            "    }\n" +
+            "}\n";
+        sampleCodes.add(new SampleCode(wrongJavaCode, "java", "WA"));
+
+        // Code mẫu 3: Chạy QUÁ thời gian giới hạn (TLE - Time Limit Exceeded)
+        String tleJavaCode = 
+            "public class Main {\n" +
+            "    public static void main(String[] args) {\n" +
+            "        while (true) {\n" +
+            "            // Vòng lặp vô hạn\n" +
+            "        }\n" +
+            "    }\n" +
+            "}\n";
+        sampleCodes.add(new SampleCode(tleJavaCode, "java", "TLE"));
+
+        // 3. Khởi chạy quá trình chấm bài và đánh giá chất lượng testcase
+        System.out.println("\nĐang chạy chấm điểm các code mẫu trên Sandbox...");
+        EvaluationService service = new EvaluationService();
         
-        try {
-            // 1. Tạo một thư mục tạm thời để lưu file code được sinh ra
-            java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("java_test_execute");
-            System.out.println("Đã tạo thư mục tạm: " + tempDir.toAbsolutePath());
+        // Cấu hình thời gian chạy tối đa là 1500ms (1.5 giây)
+        EvaluationReport report = service.evaluateTestCases(testCases, sampleCodes, null, 1500);
 
-            // 2. Code người dùng nộp (CỐ TÌNH GÂY TLE CẦN TEST - Vòng lặp vô hạn)
-            String userCode = 
-                "import java.util.Scanner;\n" +
-                "public class Main {\n" +
-                "    public static void main(String[] args) {\n" +
-                "        Scanner sc = new Scanner(System.in);\n" +
-                "        int a = sc.nextInt();\n" +
-                "        int b = sc.nextInt();\n" +
-                "        // Vòng lặp vô hạn để test TLE\n" +
-                "        while(true) {\n" +
-                "            a++;\n" +
-                "        }\n" +
-                "    }\n" +
-                "}";
-
-            // 3. Dữ liệu đầu vào test case (Input giả lập hệ thống truyền vào)
-            String input = "15 25\n"; 
-            
-            // 4. Giới hạn thời gian là 1000ms (1 giây)
-            long timeLimitMs = 1000;
-
-            // 5. Gọi Executor để chạy code
-            bll.executor.JavaExecutor javaExecutor = new bll.executor.JavaExecutor();
-            System.out.println("\nĐang biên dịch và thực thi...");
-            entity.ExecutionResult result = javaExecutor.execute(tempDir, userCode, input, timeLimitMs);
-
-            // 6. In kết quả trả về từ Executor
-            System.out.println("\n=== KẾT QUẢ TRẢ VỀ ===");
-            System.out.println("Trạng thái (Status) : " + result.getStatus());
-            System.out.println("Đầu ra (Output)     : " + result.getOutput());
-            System.out.println("Lỗi (Error)         : " + (result.getError() == null || result.getError().isEmpty() ? "Không có lỗi" : result.getError()));
-            System.out.println("Thời gian chạy      : " + result.getExecutionTime() + " ms");
-
-            if (result.getOutput() != null && result.getOutput().trim().equals("40")) {
-                System.out.println("\n✅ TEST THÀNH CÔNG: Logic chạy code hoạt động chính xác!");
-            } else {
-                System.out.println("\n❌ TEST THẤT BẠI: Kết quả không mong đợi.");
+        // 4. Hiển thị báo cáo kết quả chấm chi tiết
+        System.out.println("\n=== KẾT QUẢ CHẤM ĐIỂM CHI TIẾT ===");
+        for (EvaluationResult res : report.getDetailedResults()) {
+            System.out.printf("Code mẫu #%d | Testcase ID: %d | Trạng thái: %s | Thời gian chạy: %dms\n",
+                    res.getSubmissionId(), res.getTestcaseId(), res.getStatus(), res.getExecutionTimeMs());
+            if (!res.getStatus().equals("AC")) {
+                System.out.printf("   -> Output thực tế: \"%s\"\n", res.getActualOutput().trim());
             }
-
-        } catch (Exception e) {
-            System.err.println("\n❌ CÓ LỖI XẢY RA TRONG QUÁ TRÌNH TEST:");
-            e.printStackTrace();
         }
+
+        System.out.println("\n" + report.generateSummary());
     }
 }
