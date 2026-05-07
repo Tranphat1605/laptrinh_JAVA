@@ -87,3 +87,74 @@
 5. **Tuần 6:** Kiểm thử toàn bộ, hoàn thiện giao diện, xử lý ngoại lệ, làm tài liệu.
 
 Phân công này cho phép A, B, C làm việc song song gần như độc lập sau khi thống nhất interface, còn D sẽ bắt đầu sau nhưng có thể dùng dữ liệu giả để thiết kế giao diện trước khi có service thật. Nếu có thành viên mạnh về full-stack, có thể linh hoạt đổi vai trò. Chúc nhóm bạn triển khai suôn sẻ!
+
+
+Tables DB, run on SSMS
+
+-- 1. Xóa các bảng cũ nếu tồn tại (theo thứ tự để không bị lỗi khóa ngoại)
+DROP TABLE IF EXISTS EvaluationResult;
+DROP TABLE IF EXISTS Submission;
+DROP TABLE IF EXISTS TestCase;
+DROP TABLE IF EXISTS SampleCode;
+DROP TABLE IF EXISTS Checker;
+DROP TABLE IF EXISTS Problem;
+
+-- 2. Tạo mới toàn bộ bảng
+CREATE TABLE Problem (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  title NVARCHAR(512) NOT NULL,
+  content NVARCHAR(MAX),
+  timeLimitMs INT,
+  memoryLimitMb INT,
+  source NVARCHAR(256)
+);
+
+CREATE TABLE TestCase (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  problemId INT NOT NULL,
+  inputData NVARCHAR(MAX),
+  expectedOutput NVARCHAR(MAX),
+  isHidden BIT DEFAULT 0,
+  strengthStatus NVARCHAR(64),
+  CONSTRAINT FK_TestCase_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE
+);
+
+CREATE TABLE Submission (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  problemId INT NOT NULL,
+  sourceCode NVARCHAR(MAX),
+  language NVARCHAR(64),
+  finalStatus NVARCHAR(32),
+  isReferenceCode BIT DEFAULT 0,
+  CONSTRAINT FK_Submission_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE
+);
+
+CREATE TABLE EvaluationResult (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  submissionId INT NOT NULL,
+  testcaseId INT NOT NULL,
+  status NVARCHAR(32),
+  actualOutput NVARCHAR(MAX),
+  executionTimeMs BIGINT,
+  CONSTRAINT FK_Eval_Submission FOREIGN KEY (submissionId) REFERENCES Submission(id) ON DELETE CASCADE,
+  CONSTRAINT FK_Eval_TestCase FOREIGN KEY (testcaseId) REFERENCES TestCase(id) NO ACTION
+);
+
+CREATE TABLE SampleCode (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  problemId INT,
+  code NVARCHAR(MAX),
+  language NVARCHAR(64),
+  expectedVerdict NVARCHAR(16),
+  CONSTRAINT FK_SampleCode_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE
+);
+
+CREATE TABLE Checker (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  problemId INT,
+  code NVARCHAR(MAX),
+  language NVARCHAR(64),
+  CONSTRAINT FK_Checker_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE
+);
+
+
