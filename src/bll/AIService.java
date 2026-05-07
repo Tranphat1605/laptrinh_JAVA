@@ -1,11 +1,8 @@
 package bll;
 
 import entity.Problem;
-import entity.TestCase;
-
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.io.File;
@@ -17,8 +14,6 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.List;
-import java.util.ArrayList;
 
 public class AIService {
     private final String apiKey;
