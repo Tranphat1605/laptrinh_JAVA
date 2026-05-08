@@ -15,19 +15,31 @@ import java.nio.file.Files;
 import java.time.Duration;
 import java.util.Base64;
 
+/**
+ * AIService sử dụng Groq API (miễn phí, ~14,400 req/ngày).
+ * Đăng ký API key miễn phí tại: https://console.groq.com
+ *
+ * Model mặc định: llama-3.3-70b-versatile (text)
+ * Model vision:   meta-llama/llama-4-scout-17b-16e-instruct (text + ảnh)
+ */
 public class AIService {
     private final String apiKey;
     private final HttpClient client;
-    private static final String GEMINI_API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s";
-    private static final int MAX_RETRIES = 3;
-    // Gemini stable model - update here if Google changes the model name
-    private static final String DEFAULT_MODEL = "gemini-2.5-flash";
     private final Gson gson;
+
+    // Groq API endpoint (OpenAI-compatible)
+    private static final String GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+    private static final int MAX_RETRIES = 3;
+
+    // Model text-only: nhanh, mạnh, miễn phí
+    private static final String TEXT_MODEL = "llama-3.3-70b-versatile";
+    // Model vision: hỗ trợ phân tích ảnh
+    private static final String VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
 
     public AIService(String apiKey) {
         this.apiKey = apiKey;
         this.client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
+                .connectTimeout(Duration.ofSeconds(15))
                 .build();
         this.gson = new Gson();
     }
@@ -39,21 +51,20 @@ public class AIService {
         String prompt = "Bạn là một AI chuyên gia về lập trình thi đấu (IOI, ICPC). " +
                 "Hãy phân tích đề bài sau và trích xuất các thông tin: Tên bài, " +
                 "Mô tả yêu cầu, Giới hạn đầu vào (Constraints), Định dạng Input, Định dạng Output. " +
-                "Trả về dưới dạng file JSON.";
-        
+                "Trả về dưới dạng JSON.";
+
         String imageBase64 = null;
         if (imageFile != null && imageFile.exists()) {
             byte[] fileContent = Files.readAllBytes(imageFile.toPath());
             imageBase64 = Base64.getEncoder().encodeToString(fileContent);
         }
 
-        String payload = buildJsonPayload(prompt, text, imageBase64);
-        String model = DEFAULT_MODEL; // gemini-2.5-flash supports both text and image
-        String responseMessage = sendRequestWithRetry(payload, model);
-        
-        // Parse JSON về entity Problem (Cần cài đặt logic parse tuỳ theo schema bạn yêu cầu AI trả về)
+        String model = (imageBase64 != null) ? VISION_MODEL : TEXT_MODEL;
+        String payload = buildPayload(model, prompt, text, imageBase64);
+        String responseMessage = sendRequestWithRetry(payload);
+
         Problem p = new Problem();
-        p.setContent(responseMessage); // Tạm lưu thô để in ra GUI
+        p.setContent(responseMessage);
         return p;
     }
 
@@ -61,51 +72,63 @@ public class AIService {
      * Sinh code C++ Generator sử dụng testlib.h
      */
     public String generateGeneratorCode(Problem problem) throws Exception {
-        String prompt = "Viết một đoạn code C++ sử dụng thư viện \"testlib.h\" để sinh ngẫu nhiên dữ liệu đầu vào (Input) cho bài toán sau:\n" +
-                problem.toString() + "\n" +
-                "Yêu cầu TRỌNG TÂM:\n" +
-                "1. Bắt buộc phải khởi tạo bằng lệnh: registerGen(argc, argv, 1);\n" +
-                "2. Dùng rnd.next() để sinh số liệu.\n" +
-                "3. Dữ liệu sinh ra phải tuân thủ tuyệt đối các ràng buộc của đề bài.\n" +
-                "4. Hỗ trợ bắt tham số seed từ argv[1] để đảm bảo tính tất định.\n" +
-                "5. Tuyệt đối chỉ in ra dữ liệu test, không in thêm text thừa (như \"Nhap N:\").\n" +
-                "Chỉ trả về mã code C++ không kèm markdown.";
-
-        String payload = buildTextPayload(prompt);
-        return sendRequestWithRetry(payload, DEFAULT_MODEL);
+        String systemPrompt = "Bạn là chuyên gia lập trình thi đấu (ICPC/IOI). " +
+                "Nhiệm vụ của bạn là viết code C++ hoàn chỉnh sử dụng testlib.h để sinh dữ liệu test. " +
+                "Chỉ trả về code C++ thuần túy, không markdown, không giải thích.";
+        String userPrompt =
+                "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
+                "=== YÊU CẦU ===\n" +
+                "Viết code C++ generator sử dụng testlib.h để sinh ngẫu nhiên dữ liệu input hợp lệ cho bài toán trên.\n" +
+                "Bắt buộc:\n" +
+                "1. Dòng đầu tiên trong main: registerGen(argc, argv, 1);\n" +
+                "2. Sinh số bằng rnd.next(min, max) — đậm bảo đúng ranges của đề bài.\n" +
+                "3. In ra đúng định dạng Input mà đề bài yêu cầu, không in text thừa.\n" +
+                "4. Hỗ trợ seed từ argv[1].\n" +
+                "5. Không được in gì ra ngoài dữ liệu test (không có \"Nhap N:\" hay tương tự).\n" +
+                "\nChỉ trả về code C++, không markdown.";
+        String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
+        return sendRequestWithRetry(payload);
     }
 
     /**
      * Sinh checker C++ (nếu bài toán có nhiều cách giải đúng)
      */
     public String generateChecker(Problem problem) throws Exception {
-        String prompt = "Viết code C++ checker sử dụng thư viện testlib.h cho bài toán sau:\n" +
-                problem.toString() + "\n" +
-                "Checker cần đọc input từ inf, đáp án dự kiến từ ans, và đầu ra của thí sinh từ ouf. " +
-                "Chỉ trả về mã C++ không kèm markdown.";
-        String payload = buildTextPayload(prompt);
-        return sendRequestWithRetry(payload, DEFAULT_MODEL);
+        String systemPrompt = "Bạn là chuyên gia lập trình thi đấu (ICPC/IOI). " +
+                "Nhiệm vụ là viết checker testlib.h để so khớp đáp án. Chỉ trả về code C++ thuần túy.";
+        String userPrompt =
+                "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
+                "=== YÊU CẦU ===\n" +
+                "Viết code C++ checker sử dụng testlib.h cho bài toán trên.\n" +
+                "- Đọc input từ: inf\n" +
+                "- Đọc đáp án chuẩn từ: ans\n" +
+                "- Đọc output của thí sinh từ: ouf\n" +
+                "- Gọi quitf(_ok, ...) hoặc quitf(_wa, ...) tùy thuộc kết quả.\n" +
+                "Chỉ trả về code C++, không markdown.";
+        String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
+        return sendRequestWithRetry(payload);
     }
 
     /**
      * Tự động sinh code mẫu AC / WA / TLE
      */
     public String generateSampleCode(Problem problem, String type) throws Exception {
-        String prompt = "Viết code mẫu bằng C++ cho bài toán sau với kết quả mong đợi là: " + type + " (AC: Tối ưu chuẩn, WA: Sai logic, TLE: Quá thời gian n^2, n^3...)\n" +
+        String prompt = "Viết code mẫu bằng C++ cho bài toán sau với kết quả mong đợi là: " + type +
+                " (AC: Tối ưu chuẩn, WA: Sai logic, TLE: Quá thời gian n^2, n^3...)\n" +
                 problem.toString() + "\nChỉ trả về mã C++.";
-        String payload = buildTextPayload(prompt);
-        return sendRequestWithRetry(payload, DEFAULT_MODEL);
+        String payload = buildTextPayload(TEXT_MODEL, prompt);
+        return sendRequestWithRetry(payload);
     }
 
     /**
-     * Gửi request gọi API kèm cơ chế Retry và Timeout
+     * Gửi request tới Groq API kèm cơ chế Retry
      */
-    private String sendRequestWithRetry(String jsonPayload, String model) throws Exception {
-        String apiUrl = String.format(GEMINI_API_URL_TEMPLATE, model, this.apiKey);
+    private String sendRequestWithRetry(String jsonPayload) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(apiUrl))
+                .uri(URI.create(GROQ_API_URL))
                 .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(120)) // Tăng Timeout lên 120s cho mô hình lớn và sinh code
+                .header("Authorization", "Bearer " + this.apiKey)
+                .timeout(Duration.ofSeconds(120))
                 .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
                 .build();
 
@@ -114,84 +137,132 @@ public class AIService {
             try {
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                 JsonObject jsonResponse = gson.fromJson(response.body(), JsonObject.class);
-                
+
                 if (response.statusCode() == 200) {
-                    if (jsonResponse.has("candidates")) {
-                        JsonArray candidates = jsonResponse.getAsJsonArray("candidates");
-                        if (candidates.size() > 0) {
-                            JsonObject content = candidates.get(0).getAsJsonObject().getAsJsonObject("content");
-                            if (content != null && content.has("parts")) {
-                                JsonArray parts = content.getAsJsonArray("parts");
-                                if (parts.size() > 0) {
-                                    return parts.get(0).getAsJsonObject().get("text").getAsString();
-                                }
+                    // Groq/OpenAI format: choices[0].message.content
+                    if (jsonResponse.has("choices")) {
+                        JsonArray choices = jsonResponse.getAsJsonArray("choices");
+                        if (choices.size() > 0) {
+                            JsonObject message = choices.get(0).getAsJsonObject()
+                                    .getAsJsonObject("message");
+                            if (message != null && message.has("content")) {
+                                return stripMarkdown(message.get("content").getAsString());
                             }
                         }
                     }
-                    throw new Exception("API trả về thành công nhưng không tìm thấy nội dung content.");
+                    throw new Exception("API trả về thành công nhưng không tìm thấy nội dung.");
                 } else {
-                    // Nếu lỗi HTTP 400, 500, in ra body để dễ debug
-                    System.err.println("API Error " + response.statusCode() + ": " + response.body());
+                    System.err.println("Lỗi kết nối AI API " + response.statusCode() + ": " + response.body());
+                    // Groq trả lỗi dạng: { "error": { "message": "..." } }
                     if (jsonResponse != null && jsonResponse.has("error")) {
-                        throw new Exception("Gemini API Error: " + jsonResponse.getAsJsonObject("error").get("message").getAsString());
+                        String errorMsg = jsonResponse.getAsJsonObject("error").get("message").getAsString();
+                        throw new Exception("Lỗi kết nối AI API: " + errorMsg);
                     }
                 }
                 attempts++;
-                Thread.sleep(2000 * attempts); // Backoff
+                Thread.sleep(2000L * attempts); // Backoff
             } catch (IOException | InterruptedException e) {
                 attempts++;
                 if (attempts == MAX_RETRIES) {
-                    throw new Exception("Lỗi kết nối API sau " + MAX_RETRIES + " lần thử: " + e.getMessage());
+                    throw new Exception("Lỗi kết nối AI API sau " + MAX_RETRIES + " lần thử: " + e.getMessage());
                 }
-                Thread.sleep(2000 * attempts);
+                Thread.sleep(2000L * attempts);
             }
         }
         throw new Exception("Thất bại khi lấy dữ liệu từ AI API.");
     }
 
-    private String buildTextPayload(String text) {
+    /**
+     * Xóa markdown formatting từ response của AI (```code```, ###, v.v.)
+     * Llama/Groq thường trả về có markdown dù không yêu cầu.
+     */
+    private String stripMarkdown(String text) {
+        if (text == null) return "";
+        // Xóa code fence ``` với hoặc không có ngôn ngữ (```json, ```cpp, ```)
+        text = text.replaceAll("(?s)```[a-zA-Z]*\\n", "").replaceAll("```", "");
+        // Xóa header markdown (### Bài A:  →  Bài A:)
+        text = text.replaceAll("(?m)^#{1,6}\\s*", "");
+        // Xóa bold/italic markdown (**text**, *text*, __text__)
+        text = text.replaceAll("\\*{1,2}([^*]+)\\*{1,2}", "$1");
+        text = text.replaceAll("_{1,2}([^_]+)_{1,2}", "$1");
+        return text.trim();
+    }
+
+    /**
+     * Build payload text-only (OpenAI chat format)
+     */
+    private String buildTextPayload(String model, String userMessage) {
+        return buildPayload(model, userMessage, null, null);
+    }
+
+    /**
+     * Build payload hỗ trợ cả text và ảnh (vision)
+     */
+    private String buildPayload(String model, String prompt, String extraText, String imageBase64) {
         JsonObject payload = new JsonObject();
-        JsonArray contents = new JsonArray();
-        
-        JsonObject contentObj = new JsonObject();
-        JsonArray parts = new JsonArray();
-        
-        JsonObject textPart = new JsonObject();
-        textPart.addProperty("text", text);
-        parts.add(textPart);
-        
-        contentObj.add("parts", parts);
-        contents.add(contentObj);
-        
-        payload.add("contents", contents);
+        payload.addProperty("model", model);
+
+        JsonArray messages = new JsonArray();
+        JsonObject userMsg = new JsonObject();
+        userMsg.addProperty("role", "user");
+
+        if (imageBase64 != null) {
+            // Vision: content là mảng gồm text + image_url
+            JsonArray contentArr = new JsonArray();
+
+            JsonObject textPart = new JsonObject();
+            textPart.addProperty("type", "text");
+            textPart.addProperty("text", prompt + (extraText != null ? "\n" + extraText : ""));
+            contentArr.add(textPart);
+
+            JsonObject imagePart = new JsonObject();
+            imagePart.addProperty("type", "image_url");
+            JsonObject imageUrl = new JsonObject();
+            imageUrl.addProperty("url", "data:image/jpeg;base64," + imageBase64);
+            imagePart.add("image_url", imageUrl);
+            contentArr.add(imagePart);
+
+            userMsg.add("content", contentArr);
+        } else {
+            // Text-only: content là string
+            String fullText = prompt + (extraText != null ? "\n" + extraText : "");
+            userMsg.addProperty("content", fullText);
+        }
+
+        messages.add(userMsg);
+        payload.add("messages", messages);
+
+        // Giới hạn output để tránh vượt quota token
+        payload.addProperty("max_tokens", 4096);
+
         return gson.toJson(payload);
     }
 
-    private String buildJsonPayload(String prompt, String text, String imageBase64) {
+    /**
+     * Build payload với system prompt + user message (tốt hơn cho code generation).
+     * Groq/OpenAI hỗ trợ role "system" để set ngữ cảnh chuyên gia.
+     */
+    private String buildPayloadWithSystem(String model, String systemPrompt, String userMessage) {
         JsonObject payload = new JsonObject();
-        JsonArray contents = new JsonArray();
-        
-        JsonObject contentObj = new JsonObject();
-        JsonArray parts = new JsonArray();
-        
-        JsonObject textPart = new JsonObject();
-        textPart.addProperty("text", prompt + "\n" + (text != null ? text : ""));
-        parts.add(textPart);
-        
-        if (imageBase64 != null) {
-            JsonObject inlineDataPart = new JsonObject();
-            JsonObject inlineData = new JsonObject();
-            // Gemini API expects mime_type and base64 data
-            inlineData.addProperty("mime_type", "image/jpeg");
-            inlineData.addProperty("data", imageBase64);
-            inlineDataPart.add("inline_data", inlineData);
-            parts.add(inlineDataPart);
-        }
-        
-        contentObj.add("parts", parts);
-        contents.add(contentObj);
-        
-        payload.add("contents", contents);
+        payload.addProperty("model", model);
+
+        JsonArray messages = new JsonArray();
+
+        // System message — set vai trò chuyên gia
+        JsonObject sysMsg = new JsonObject();
+        sysMsg.addProperty("role", "system");
+        sysMsg.addProperty("content", systemPrompt);
+        messages.add(sysMsg);
+
+        // User message — đề bài + yêu cầu
+        JsonObject userMsg = new JsonObject();
+        userMsg.addProperty("role", "user");
+        userMsg.addProperty("content", userMessage);
+        messages.add(userMsg);
+
+        payload.add("messages", messages);
+        payload.addProperty("max_tokens", 4096);
+
         return gson.toJson(payload);
     }
 }

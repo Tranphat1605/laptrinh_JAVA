@@ -37,4 +37,26 @@ public class Problem {
 
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
+
+    /**
+     * Trả về nội dung đề bài dạng text để truyền vào AI prompt.
+     * Nếu title/source đã được set thì thêm vào context.
+     */
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        if (title != null && !title.isBlank() && !title.equals("Mock")) {
+            sb.append("Tên bài: ").append(title).append("\n");
+        }
+        if (timeLimitMs > 0) {
+            sb.append("Giới hạn thời gian: ").append(timeLimitMs).append(" ms\n");
+        }
+        if (memoryLimitMb > 0) {
+            sb.append("Giới hạn bộ nhớ: ").append(memoryLimitMb).append(" MB\n");
+        }
+        if (content != null && !content.isBlank()) {
+            sb.append("\nNội dung đề bài:\n").append(content);
+        }
+        return sb.toString().trim();
+    }
 }
