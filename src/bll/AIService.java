@@ -18,7 +18,7 @@ import java.util.Base64;
 public class AIService {
     private final String apiKey;
     private final HttpClient client;
-    private static final String API_URL = "https://api.openai.com/v1/chat/completions";
+    private static final String GEMINI_API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s";
     private static final int MAX_RETRIES = 3;
     private final Gson gson;
 
@@ -46,11 +46,13 @@ public class AIService {
         }
 
         String payload = buildJsonPayload(prompt, text, imageBase64);
-        String responseMessage = sendRequestWithRetry(payload);
+        String model = (imageBase64 == null) ? "gemini-1.5-flash" : "gemini-1.5-pro";
+        String responseMessage = sendRequestWithRetry(payload, model);
         
         // Parse JSON về entity Problem (Cần cài đặt logic parse tuỳ theo schema bạn yêu cầu AI trả về)
-        // return parseProblemJson(responseMessage);
-        return new Problem(); // Mock return
+        Problem p = new Problem();
+        p.setContent(responseMessage); // Tạm lưu thô để in ra GUI
+        return p;
     }
 
     /**
@@ -68,7 +70,7 @@ public class AIService {
                 "Chỉ trả về mã code C++ không kèm markdown.";
 
         String payload = buildTextPayload(prompt);
-        return sendRequestWithRetry(payload);
+        return sendRequestWithRetry(payload, "gemini-1.5-flash");
     }
 
     /**
@@ -80,7 +82,7 @@ public class AIService {
                 "Checker cần đọc input từ inf, đáp án dự kiến từ ans, và đầu ra của thí sinh từ ouf. " +
                 "Chỉ trả về mã C++ không kèm markdown.";
         String payload = buildTextPayload(prompt);
-        return sendRequestWithRetry(payload);
+        return sendRequestWithRetry(payload, "gemini-1.5-flash");
     }
 
     /**
@@ -90,17 +92,17 @@ public class AIService {
         String prompt = "Viết code mẫu bằng C++ cho bài toán sau với kết quả mong đợi là: " + type + " (AC: Tối ưu chuẩn, WA: Sai logic, TLE: Quá thời gian n^2, n^3...)\n" +
                 problem.toString() + "\nChỉ trả về mã C++.";
         String payload = buildTextPayload(prompt);
-        return sendRequestWithRetry(payload);
+        return sendRequestWithRetry(payload, "gemini-1.5-flash");
     }
 
     /**
      * Gửi request gọi API kèm cơ chế Retry và Timeout
      */
-    private String sendRequestWithRetry(String jsonPayload) throws Exception {
+    private String sendRequestWithRetry(String jsonPayload, String model) throws Exception {
+        String apiUrl = String.format(GEMINI_API_URL_TEMPLATE, model, this.apiKey);
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(API_URL))
+                .uri(URI.create(apiUrl))
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
                 .timeout(Duration.ofSeconds(120)) // Tăng Timeout lên 120s cho mô hình lớn và sinh code
                 .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
                 .build();
@@ -109,15 +111,18 @@ public class AIService {
         while (attempts < MAX_RETRIES) {
             try {
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                JsonObject jsonResponse = gson.fromJson(response.body(), JsonObject.class);
+                
                 if (response.statusCode() == 200) {
-                    // Xử lý bóc tách text trả về thực sự từ choices[0].message.content
-                    JsonObject jsonResponse = gson.fromJson(response.body(), JsonObject.class);
-                    if (jsonResponse.has("choices")) {
-                        JsonArray choices = jsonResponse.getAsJsonArray("choices");
-                        if (choices.size() > 0) {
-                            JsonObject message = choices.get(0).getAsJsonObject().getAsJsonObject("message");
-                            if (message != null && message.has("content")) {
-                                return message.get("content").getAsString();
+                    if (jsonResponse.has("candidates")) {
+                        JsonArray candidates = jsonResponse.getAsJsonArray("candidates");
+                        if (candidates.size() > 0) {
+                            JsonObject content = candidates.get(0).getAsJsonObject().getAsJsonObject("content");
+                            if (content != null && content.has("parts")) {
+                                JsonArray parts = content.getAsJsonArray("parts");
+                                if (parts.size() > 0) {
+                                    return parts.get(0).getAsJsonObject().get("text").getAsString();
+                                }
                             }
                         }
                     }
@@ -125,6 +130,9 @@ public class AIService {
                 } else {
                     // Nếu lỗi HTTP 400, 500, in ra body để dễ debug
                     System.err.println("API Error " + response.statusCode() + ": " + response.body());
+                    if (jsonResponse != null && jsonResponse.has("error")) {
+                        throw new Exception("Gemini API Error: " + jsonResponse.getAsJsonObject("error").get("message").getAsString());
+                    }
                 }
                 attempts++;
                 Thread.sleep(2000 * attempts); // Backoff
@@ -141,51 +149,48 @@ public class AIService {
 
     private String buildTextPayload(String text) {
         JsonObject payload = new JsonObject();
-        payload.addProperty("model", "gpt-4o-mini");
-
-        JsonArray messages = new JsonArray();
-        JsonObject message = new JsonObject();
-        message.addProperty("role", "user");
-        message.addProperty("content", text);
-        messages.add(message);
-
-        payload.add("messages", messages);
+        JsonArray contents = new JsonArray();
+        
+        JsonObject contentObj = new JsonObject();
+        JsonArray parts = new JsonArray();
+        
+        JsonObject textPart = new JsonObject();
+        textPart.addProperty("text", text);
+        parts.add(textPart);
+        
+        contentObj.add("parts", parts);
+        contents.add(contentObj);
+        
+        payload.add("contents", contents);
         return gson.toJson(payload);
     }
 
     private String buildJsonPayload(String prompt, String text, String imageBase64) {
-        if (imageBase64 == null) {
-            return buildTextPayload(prompt + "\n" + (text != null ? text : ""));
-        } else {
-            JsonObject payload = new JsonObject();
-            payload.addProperty("model", "gpt-4o");
-
-            JsonArray messages = new JsonArray();
-            JsonObject message = new JsonObject();
-            message.addProperty("role", "user");
-
-            JsonArray contentArray = new JsonArray();
-
-            // Text part
-            JsonObject textObj = new JsonObject();
-            textObj.addProperty("type", "text");
-            textObj.addProperty("text", prompt + "\n" + (text != null ? text : ""));
-            contentArray.add(textObj);
-
-            // Image part
-            JsonObject imageObj = new JsonObject();
-            imageObj.addProperty("type", "image_url");
-            JsonObject imageUrlObj = new JsonObject();
-            imageUrlObj.addProperty("url", "data:image/jpeg;base64," + imageBase64);
-            imageObj.add("image_url", imageUrlObj);
-            contentArray.add(imageObj);
-
-            message.add("content", contentArray);
-            messages.add(message);
-            payload.add("messages", messages);
-
-            return gson.toJson(payload);
+        JsonObject payload = new JsonObject();
+        JsonArray contents = new JsonArray();
+        
+        JsonObject contentObj = new JsonObject();
+        JsonArray parts = new JsonArray();
+        
+        JsonObject textPart = new JsonObject();
+        textPart.addProperty("text", prompt + "\n" + (text != null ? text : ""));
+        parts.add(textPart);
+        
+        if (imageBase64 != null) {
+            JsonObject inlineDataPart = new JsonObject();
+            JsonObject inlineData = new JsonObject();
+            // Gemini API expects mime_type and base64 data
+            inlineData.addProperty("mime_type", "image/jpeg");
+            inlineData.addProperty("data", imageBase64);
+            inlineDataPart.add("inline_data", inlineData);
+            parts.add(inlineDataPart);
         }
+        
+        contentObj.add("parts", parts);
+        contents.add(contentObj);
+        
+        payload.add("contents", contents);
+        return gson.toJson(payload);
     }
 }
 
