@@ -20,6 +20,8 @@ public class AIService {
     private final HttpClient client;
     private static final String GEMINI_API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s";
     private static final int MAX_RETRIES = 3;
+    // Gemini stable model - update here if Google changes the model name
+    private static final String DEFAULT_MODEL = "gemini-2.5-flash";
     private final Gson gson;
 
     public AIService(String apiKey) {
@@ -46,7 +48,7 @@ public class AIService {
         }
 
         String payload = buildJsonPayload(prompt, text, imageBase64);
-        String model = (imageBase64 == null) ? "gemini-1.5-flash" : "gemini-1.5-pro";
+        String model = DEFAULT_MODEL; // gemini-2.5-flash supports both text and image
         String responseMessage = sendRequestWithRetry(payload, model);
         
         // Parse JSON về entity Problem (Cần cài đặt logic parse tuỳ theo schema bạn yêu cầu AI trả về)
@@ -70,7 +72,7 @@ public class AIService {
                 "Chỉ trả về mã code C++ không kèm markdown.";
 
         String payload = buildTextPayload(prompt);
-        return sendRequestWithRetry(payload, "gemini-1.5-flash");
+        return sendRequestWithRetry(payload, DEFAULT_MODEL);
     }
 
     /**
@@ -82,7 +84,7 @@ public class AIService {
                 "Checker cần đọc input từ inf, đáp án dự kiến từ ans, và đầu ra của thí sinh từ ouf. " +
                 "Chỉ trả về mã C++ không kèm markdown.";
         String payload = buildTextPayload(prompt);
-        return sendRequestWithRetry(payload, "gemini-1.5-flash");
+        return sendRequestWithRetry(payload, DEFAULT_MODEL);
     }
 
     /**
@@ -92,7 +94,7 @@ public class AIService {
         String prompt = "Viết code mẫu bằng C++ cho bài toán sau với kết quả mong đợi là: " + type + " (AC: Tối ưu chuẩn, WA: Sai logic, TLE: Quá thời gian n^2, n^3...)\n" +
                 problem.toString() + "\nChỉ trả về mã C++.";
         String payload = buildTextPayload(prompt);
-        return sendRequestWithRetry(payload, "gemini-1.5-flash");
+        return sendRequestWithRetry(payload, DEFAULT_MODEL);
     }
 
     /**
