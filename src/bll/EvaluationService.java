@@ -49,13 +49,23 @@ public class EvaluationService {
                     hasRTE = true;
                 }
 
+                // Cập nhật độ mạnh của Test Case 
+                // Testcase nào bắt được code cố tình sai (WA) hoặc code chậm (TLE) sẽ được đánh giá là Testcase chất lượng (Strong)
+                String expected = sample.getExpectedVerdict().toUpperCase();
+                if (expected.equals("WA") && actualVerdict.equals("WA")) {
+                    tc.setStrengthStatus("Strong");
+                } else if (expected.equals("TLE") && actualVerdict.equals("TLE")) {
+                    tc.setStrengthStatus("Strong");
+                } else if (tc.getStrengthStatus() == null || tc.getStrengthStatus().isEmpty()) {
+                    tc.setStrengthStatus("Normal");
+                }
+
                 // Ghi nhận chi tiết (Giả sử code mẫu đang chạy có id = i cho mục đích tracking)
                 EvaluationResult tcResult = new EvaluationResult(0, i, tc.getId(), actualVerdict, execResult.getOutput(), execResult.getExecutionTime());
                 report.addResult(tcResult);
             }
 
             // --- PHÂN TÍCH NHẬN XÉT DỰA TRÊN VERDICT CHUẨN CỦA CODE MẪU ---
-            String expected = sample.getExpectedVerdict().toUpperCase();
             
             // 1. Nếu code mẫu là AC (Chuẩn)
             if (expected.equals("AC")) {

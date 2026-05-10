@@ -78,13 +78,16 @@ public class AIService {
         String userPrompt =
                 "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
                 "=== YÊU CẦU ===\n" +
-                "Viết code C++ generator sử dụng testlib.h để sinh ngẫu nhiên dữ liệu input hợp lệ cho bài toán trên.\n" +
+                "Viết code C++ generator sử dụng testlib.h để tự động sinh dữ liệu input cho bài toán trên.\n" +
                 "Bắt buộc:\n" +
                 "1. Dòng đầu tiên trong main: registerGen(argc, argv, 1);\n" +
-                "2. Sinh số bằng rnd.next(min, max) — đậm bảo đúng ranges của đề bài.\n" +
+                "2. Hỗ trợ seed từ argv[1].\n" +
                 "3. In ra đúng định dạng Input mà đề bài yêu cầu, không in text thừa.\n" +
-                "4. Hỗ trợ seed từ argv[1].\n" +
-                "5. Không được in gì ra ngoài dữ liệu test (không có \"Nhap N:\" hay tương tự).\n" +
+                "4. CHÚ Ý QUAN TRỌNG VỀ ĐỘ MẠNH (STRONG TESTCASES):\n" +
+                "   - Generator cần lấy arg từ argv[2] (nếu truyền vào) làm tham số để quyết định mode sinh testcase.\n" +
+                "   - Nếu mode là 'edge': hãy sinh các trường hợp biên, giá trị tối thiểu, tối đa (VD: N=0, N=1, mảng rỗng, mảng gồm các phần tử bằng nhau hoặc âm hoàn toàn).\n" +
+                "   - Nếu mode là 'max': phải sinh Input sao cho N hoặc giá trị đạt sát Tối Đa của ràng buộc đề bài (áp lực cao để tạo TLE/MLE).\n" +
+                "   - Nếu mode là 'random' hoặc không có mode, sinh Random ngẫu nhiên.\n" +
                 "\nChỉ trả về code C++, không markdown.";
         String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
         return sendRequestWithRetry(payload);
@@ -113,9 +116,25 @@ public class AIService {
      * Tự động sinh code mẫu AC / WA / TLE
      */
     public String generateSampleCode(Problem problem, String type) throws Exception {
-        String prompt = "Viết code mẫu bằng C++ cho bài toán sau với kết quả mong đợi là: " + type +
-                " (AC: Tối ưu chuẩn, WA: Sai logic, TLE: Quá thời gian n^2, n^3...)\n" +
-                problem.toString() + "\nChỉ trả về mã C++.";
+        String constraintInstructions = "";
+        if (type.equals("AC")) {
+            constraintInstructions = "- Là code C++ giải chuẩn xác nhất, độ phức tạp thời gian cực kỳ tối ưu, qua được toàn bộ các trường hợp Edge Cases và Input cực lớn.\n";
+        } else if (type.equals("WA")) {
+            constraintInstructions = "- Cố tình viết SAI LOGIC ở các TRƯỜNG HỢP BIÊN (Edge cases) nhưng vẫn chạy đúng ở các testcase cơ bản.\n" +
+                                     "- Ví dụ: Không xét trường hợp n=0, hoặc kiểu dữ liệu Int bị tràn số thay vì dùng Long Long, hoặc sai dấu tại điểm giao cắt.\n" +
+                                     "- Không bị TLE, chỉ được in kết quả sai.\n";
+        } else if (type.equals("TLE")) {
+            constraintInstructions = "- Cố tình viết thuật toán VÉT CẠN (Brute-force) có độ phức tạp cao (O(N^2) hoặc O(N^3)) để bị Quá thời gian (Time Limit Exceeded) khi Input lớn.\n" +
+                                     "- Tuyệt đối KHÔNG LẶP VÔ HẠN bằng while(true), code vẫn phải cho ra kết quả đúng nếu chạy đủ lâu.\n";
+        }
+
+        String prompt = "Bạn là một thí sinh tham gia kỳ thi lập trình. \n" +
+                "Hãy viết code mẫu bằng C++ cho bài toán sau với phân loại chất lượng là " + type + ".\n" +
+                "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
+                "=== YÊU CẦU ĐỐI VỚI LOẠI CODE " + type + " ===\n" +
+                constraintInstructions + 
+                "\nChỉ trả về mã C++ thuần túy, không format markdown, không giải thích dòng nào cả.";
+
         String payload = buildTextPayload(TEXT_MODEL, prompt);
         return sendRequestWithRetry(payload);
     }

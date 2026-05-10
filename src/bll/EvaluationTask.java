@@ -60,6 +60,18 @@ public class EvaluationTask implements Runnable {
             EvaluationReport report = evaluationService.evaluateTestCases(testCases, sampleCodes, checker, timeLimitMs);
 
             if (listener != null) {
+                listener.onProgress(80, 100, "Cập nhật kết quả độ mạnh của Test Case vào CSDL...");
+            }
+
+            // --- LƯU TRỮ ĐỘ MẠNH TESTCASE SAU KHI ĐÁNH GIÁ ---
+            dal.TestCaseDAO testCaseDAO = new dal.TestCaseDAO();
+            for (TestCase tc : testCases) {
+                if (tc.getId() > 0 && tc.getStrengthStatus() != null) {
+                    testCaseDAO.updateTestCaseStrength(tc.getId(), tc.getStrengthStatus());
+                }
+            }
+
+            if (listener != null) {
                 listener.onProgress(100, 100, "Hoàn thành chấm điểm và trích xuất báo cáo!");
                 listener.onComplete(report);
             }

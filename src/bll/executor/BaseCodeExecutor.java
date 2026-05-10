@@ -8,7 +8,8 @@ import java.util.concurrent.TimeUnit;
 public abstract class BaseCodeExecutor implements CodeExecutor {
 
     protected ExecutionResult runProcess(ProcessBuilder pb, String input, long timeLimitMs) {
-        long startTime = System.currentTimeMillis();
+        // Sử dụng System.nanoTime() thay vì System.currentTimeMillis() để đo đếm thời gian chuẩn xác nhất
+        long startTimeNano = System.nanoTime();
         Process process = null;
         StreamConsumer stdoutConsumer = null;
         StreamConsumer stderrConsumer = null;
@@ -34,7 +35,7 @@ public abstract class BaseCodeExecutor implements CodeExecutor {
 
             // Chờ tiến trình kết thúc có giới hạn thời gian
             boolean finished = process.waitFor(timeLimitMs, TimeUnit.MILLISECONDS);
-            long executionTime = System.currentTimeMillis() - startTime;
+            long executionTime = (System.nanoTime() - startTimeNano) / 1_000_000; // Đổi từ nano ra mili giây
 
             if (!finished) {
                 process.destroyForcibly();
@@ -56,7 +57,7 @@ public abstract class BaseCodeExecutor implements CodeExecutor {
 
             return new ExecutionResult("SUCCESS", output, error, executionTime);
         } catch (Exception e) {
-            long executionTime = System.currentTimeMillis() - startTime;
+            long executionTime = (System.nanoTime() - startTimeNano) / 1_000_000;
             if (process != null) {
                 process.destroyForcibly();
             }
