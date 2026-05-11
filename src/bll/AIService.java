@@ -49,9 +49,13 @@ public class AIService {
      */
     public Problem analyzeProblem(String text, File imageFile) throws Exception {
         String prompt = "Bạn là một AI chuyên gia về lập trình thi đấu (IOI, ICPC). " +
-                "Hãy phân tích đề bài sau và trích xuất các thông tin: Tên bài, " +
-                "Mô tả yêu cầu, Giới hạn đầu vào (Constraints), Định dạng Input, Định dạng Output. " +
-                "Trả về dưới dạng JSON.";
+                "Hãy phân tích đề bài sau và trích xuất các thông tin dưới định dạng JSON.\n" +
+                "Yêu cầu các trường JSON bắt buộc:\n" +
+                "1. \"title\": Tên bài (nếu không có trong đề, hãy tự đặt ngắn gọn).\n" +
+                "2. \"timeLimitMs\": Giới hạn thời gian tính bằng số milliseconds (Ví dụ 1 giây = 1000). Nếu không tìm thấy, trả về 1000.\n" +
+                "3. \"memoryLimitMb\": Giới hạn bộ nhớ tính bằng số Megabytes. Nếu không tìm thấy, trả về 256.\n" +
+                "4. \"content\": Gom chung TẤT CẢ các phần: Mô tả yêu cầu, Giới hạn đầu vào (Constraints), Định dạng Input, Định dạng Output vào thành một đoạn văn bản tóm tắt mạch lạc.\n" +
+                "Chỉ trả về NGAY khối JSON hợp lệ, KHÔNG VIẾT GÌ THÊM (no markdown, no extra text).";
 
         String imageBase64 = null;
         if (imageFile != null && imageFile.exists()) {
@@ -64,7 +68,18 @@ public class AIService {
         String responseMessage = sendRequestWithRetry(payload);
 
         Problem p = new Problem();
-        p.setContent(responseMessage);
+        try {
+            JsonObject jsonOutput = this.gson.fromJson(responseMessage, JsonObject.class);
+            if (jsonOutput.has("title")) p.setTitle(jsonOutput.get("title").getAsString());
+            if (jsonOutput.has("timeLimitMs")) p.setTimeLimitMs(jsonOutput.get("timeLimitMs").getAsInt());
+            if (jsonOutput.has("memoryLimitMb")) p.setMemoryLimitMb(jsonOutput.get("memoryLimitMb").getAsInt());
+            if (jsonOutput.has("content")) p.setContent(jsonOutput.get("content").getAsString());
+        } catch (Exception e) {
+            System.err.println("AI không trả về JSON hợp lệ: " + e.getMessage());
+            p.setContent(responseMessage);
+            p.setTimeLimitMs(1000);
+            p.setMemoryLimitMb(256);
+        }
         return p;
     }
 
@@ -213,11 +228,11 @@ public class AIService {
         if (text == null) return "";
         // Xóa code fence ``` với hoặc không có ngôn ngữ (```json, ```cpp, ```)
         text = text.replaceAll("(?s)```[a-zA-Z]*\\n", "").replaceAll("```", "");
-        // Xóa header markdown (### Bài A:  →  Bài A:)
-        text = text.replaceAll("(?m)^#{1,6}\\s*", "");
-        // Xóa bold/italic markdown (**text**, *text*, __text__)
-        text = text.replaceAll("\\*{1,2}([^*]+)\\*{1,2}", "$1");
-        text = text.replaceAll("_{1,2}([^_]+)_{1,2}", "$1");
+        // Xóa header markdown (### Bài A:  →  Bài A:) nhưng chừa lại dấu # của #include
+        text = text.replaceAll("(?m)^#{1,6}\\s+(?!include)", "");
+        // Xóa bold/italic markdown (**text**, *text*, __text__) (Nhưng bảo vệ các dấu underscore trong C++ như std::mt19937_64)
+        text = text.replaceAll("(?<![a-zA-Z0-9])\\*{1,2}([^*]+)\\*{1,2}(?![a-zA-Z0-9])", "$1");
+        text = text.replaceAll("(?<![a-zA-Z0-9])_{1,2}([^_]+)_{1,2}(?![a-zA-Z0-9])", "$1");
         return text.trim();
     }
 

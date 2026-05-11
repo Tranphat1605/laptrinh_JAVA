@@ -195,8 +195,49 @@ public class TeacherFrame extends JFrame {
                 });
         });
 
-        JPanel top = new JPanel();
+        JButton btnRunCpp = new JButton("▶ Chạy Code C++ để Sinh 20 Testcase vào Database");
+        btnRunCpp.setBackground(new Color(255, 140, 0));
+        btnRunCpp.setForeground(Color.WHITE);
+        btnRunCpp.addActionListener(e -> {
+             String genCode = generatorCodeArea.getText();
+             String acCode = (sampleACArea != null) ? sampleACArea.getText() : "";
+             if (genCode.isEmpty() || acCode.isEmpty() || genCode.startsWith("//") || acCode.startsWith("Đang")) {
+                 JOptionPane.showMessageDialog(this, "⚠ Cần phải có Code Generator (Tab 2) và Mã Mẫu AC (Tab 3) để sinh Testcase.\nVui lòng bấm 'Yêu cầu AI' ở cả 2 Tab trước!", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
+                 return;
+             }
+             
+             evalController.compileAndGenerateTestcases(genCode, acCode, 1, 20, new EvaluationController.EvaluationListener() {
+                 @Override public void onStart() {
+                     JOptionPane.showMessageDialog(null, "Bắt đầu tiến trình sinh Testcase ở chạy nền. Vui lòng xem Log ở Tab 4.");
+                     if(evalLogArea != null) evalLogArea.append("=== BẮT ĐẦU SINH TESTCASE BẰNG C++ ===\n");
+                 }
+                 @Override public void onProgress(int cur, int tot, String status) {
+                     SwingUtilities.invokeLater(() -> {
+                         if(evalProgressBar != null) {
+                             evalProgressBar.setValue((int)((cur / (double)tot) * 100));
+                             evalProgressBar.setString(status);
+                         }
+                         if(evalLogArea != null) evalLogArea.append(status + "\n");
+                     });
+                 }
+                 @Override public void onComplete(EvaluationReport report) {
+                     SwingUtilities.invokeLater(() -> {
+                         if(evalLogArea != null) evalLogArea.append("✅ Hoàn tất sinh và lưu bộ số liệu vào Database!\n");
+                         JOptionPane.showMessageDialog(null, "Sinh Testcase thành công! CSDl đã được cập nhật.");
+                     });
+                 }
+                 @Override public void onError(Exception e) {
+                     SwingUtilities.invokeLater(() -> {
+                         if(evalLogArea != null) evalLogArea.append("❌ LỖI KHI SINH: " + e.getMessage() + "\n");
+                         JOptionPane.showMessageDialog(null, "Lỗi: " + e.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+                     });
+                 }
+             });
+        });
+
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.CENTER));
         top.add(btnGen);
+        top.add(btnRunCpp);
         panel.add(top, BorderLayout.NORTH);
         panel.add(splitPane, BorderLayout.CENTER);
         return panel;
