@@ -16,8 +16,8 @@ public class CppExecutor extends BaseCodeExecutor {
 
             // Biên dịch với cờ tối ưu hóa -O2 và chuẩn C++17
             ProcessBuilder compilePb = new ProcessBuilder("g++", "-O2", "-std=c++17", sourceFile.getAbsolutePath(), "-o", exeFile.getAbsolutePath());
-            ExecutionResult compileResult = runProcess(compilePb, "", 15000); // Tăng thời gian biên dịch C++
-            if (!exeFile.exists() || compileResult.getStatus().equals("RTE") || compileResult.getStatus().equals("CE")) {
+            ExecutionResult compileResult = runProcess(compilePb, "", 15000, false); // Tăng thời gian biên dịch C++ và không đo CPU
+            if (!exeFile.exists() || compileResult.getStatus().equals("RTE") || compileResult.getStatus().equals("CE") || compileResult.getStatus().equals("TLE")) {
                 return new ExecutionResult("CE", "", compileResult.getError(), 0);
             }
 

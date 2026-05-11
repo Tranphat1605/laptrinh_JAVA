@@ -27,6 +27,7 @@ public class EvaluationService {
             int passedCount = 0;
             boolean hasTLE = false;
             boolean hasRTE = false;
+            String expected = sample.getExpectedVerdict().toUpperCase();
 
             for (TestCase tc : testCases) {
                 // Sử dụng Sandbox thực thi code thí sinh/mẫu
@@ -51,7 +52,6 @@ public class EvaluationService {
 
                 // Cập nhật độ mạnh của Test Case 
                 // Testcase nào bắt được code cố tình sai (WA) hoặc code chậm (TLE) sẽ được đánh giá là Testcase chất lượng (Strong)
-                String expected = sample.getExpectedVerdict().toUpperCase();
                 if (expected.equals("WA") && actualVerdict.equals("WA")) {
                     tc.setStrengthStatus("Strong");
                 } else if (expected.equals("TLE") && actualVerdict.equals("TLE")) {

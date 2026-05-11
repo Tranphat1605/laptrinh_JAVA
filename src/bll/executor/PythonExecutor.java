@@ -32,11 +32,16 @@ public class PythonExecutor extends BaseCodeExecutor {
     }
 
     private String findPythonCommand() {
-        if (isCommandAvailable("python")) {
-            return "python";
+        boolean isLinux = System.getProperty("os.name").toLowerCase().contains("linux");
+        if (isLinux) {
+            return "python3"; // Trên Linux bắt buộc ưu tiên gọi python3
         }
+
         if (isCommandAvailable("python3")) {
             return "python3";
+        }
+        if (isCommandAvailable("python")) {
+            return "python";
         }
         if (isCommandAvailable("py")) {
             return "py";
