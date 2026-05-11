@@ -26,43 +26,66 @@ public class EvaluationService {
             SampleCode sample = sampleCodes.get(i);
             int passedCount = 0;
             boolean hasTLE = false;
-            boolean hasRTE = false;
             String expected = sample.getExpectedVerdict().toUpperCase();
 
-            for (TestCase tc : testCases) {
-                // Sử dụng Sandbox thực thi code thí sinh/mẫu
-                ExecutionResult execResult = sandboxService.executeCode(sample.getCode(), sample.getLanguage(), tc.getInputData(), timeLimitMs);
-                
-                String actualVerdict;
-                if (checker != null) {
-                    // Nếu bài toán có cung cấp custom checker
-                    actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checker);
-                } else {
-                    // So khớp chính xác mặc định
-                    actualVerdict = getVerdict(execResult, tc.getExpectedOutput());
-                }
-                
-                if (actualVerdict.equals("AC")) {
-                    passedCount++;
-                } else if (actualVerdict.equals("TLE")) {
-                    hasTLE = true;
-                } else if (actualVerdict.equals("RTE")) {
-                    hasRTE = true;
+            try {
+                // Tách bước Biên dịch
+                bll.executor.CodeExecutor executor = bll.executor.CodeExecutorFactory.getExecutor(sample.getLanguage());
+                if (executor == null) continue;
+
+                java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("eval_sandbox");
+                ExecutionResult compileResult = executor.compile(tempDir, sample.getCode());
+
+                if (!compileResult.getStatus().equals("SUCCESS")) {
+                    report.addWarning("Mã nguồn mẫu (" + expected + ") không thể biên dịch: " + compileResult.getError());
+                    continue;
                 }
 
-                // Cập nhật độ mạnh của Test Case 
-                // Testcase nào bắt được code cố tình sai (WA) hoặc code chậm (TLE) sẽ được đánh giá là Testcase chất lượng (Strong)
-                if (expected.equals("WA") && actualVerdict.equals("WA")) {
-                    tc.setStrengthStatus("Strong");
-                } else if (expected.equals("TLE") && actualVerdict.equals("TLE")) {
-                    tc.setStrengthStatus("Strong");
-                } else if (tc.getStrengthStatus() == null || tc.getStrengthStatus().isEmpty()) {
-                    tc.setStrengthStatus("Normal");
+                for (TestCase tc : testCases) {
+                    // Chạy code mẫu qua từng testcase
+                    ExecutionResult execResult = executor.runCode(tempDir, tc.getInputData(), timeLimitMs);
+                    
+                    String actualVerdict;
+                    if (checker != null) {
+                        // Nếu bài toán có cung cấp custom checker
+                        actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checker);
+                    } else {
+                        // So khớp chính xác mặc định
+                        actualVerdict = getVerdict(execResult, tc.getExpectedOutput());
+                    }
+                    
+                    if (actualVerdict.equals("AC")) {
+                        passedCount++;
+                    } else if (actualVerdict.equals("TLE")) {
+                        hasTLE = true;
+                    }
+
+                    // Cập nhật độ mạnh của Test Case 
+                    // Testcase nào bắt được code cố tình sai (WA) hoặc code chậm (TLE) sẽ được đánh giá là Testcase chất lượng (Strong)
+                    if (expected.equals("WA") && actualVerdict.equals("WA")) {
+                        tc.setStrengthStatus("Strong");
+                    } else if (expected.equals("TLE") && actualVerdict.equals("TLE")) {
+                        tc.setStrengthStatus("Strong");
+                    } else if (tc.getStrengthStatus() == null || tc.getStrengthStatus().isEmpty()) {
+                        tc.setStrengthStatus("Normal");
+                    }
+
+                    // Ghi nhận chi tiết
+                    EvaluationResult tcResult = new EvaluationResult(0, i, tc.getId(), actualVerdict, execResult.getOutput(), execResult.getExecutionTime());
+                    report.addResult(tcResult);
                 }
 
-                // Ghi nhận chi tiết (Giả sử code mẫu đang chạy có id = i cho mục đích tracking)
-                EvaluationResult tcResult = new EvaluationResult(0, i, tc.getId(), actualVerdict, execResult.getOutput(), execResult.getExecutionTime());
-                report.addResult(tcResult);
+                // Xóa file tạm sau khi chấm hết các TC
+                try {
+                    java.io.File[] files = tempDir.toFile().listFiles();
+                    if (files != null) {
+                        for (java.io.File f : files) f.delete();
+                    }
+                    java.nio.file.Files.deleteIfExists(tempDir);
+                } catch (Exception ignored) {}
+
+            } catch (Exception e) {
+                report.addWarning("Lỗi khi đánh giá code mẫu: " + e.getMessage());
             }
 
             // --- PHÂN TÍCH NHẬN XÉT DỰA TRÊN VERDICT CHUẨN CỦA CODE MẪU ---
@@ -126,38 +149,36 @@ public class EvaluationService {
 
         String actual = execResult.getOutput();
         
-        // Chuẩn bị Input cho Checker. 
-        // Khuyến nghị cấu trúc: Dòng 1: [---INPUT---], Giữa: Dữ liệu input, ... để dễ parse trong checker code
-        String checkerInput = "===INPUT===\n" + (inputData == null ? "" : inputData) + "\n" +
-                              "===EXPECTED===\n" + (expectedOutput == null ? "" : expectedOutput) + "\n" +
-                              "===ACTUAL===\n" + (actual == null ? "" : actual) + "\n";
+        ExecutionResult checkerResult = sandboxService.executeChecker(
+                checker.getCode(),
+                inputData,
+                expectedOutput,
+                actual,
+                5000 // Time limit dư dả cho checker
+        );
         
-        // Chạy file checker (Cho thêm time limit dư dả cho checker như 5000ms)
-        ExecutionResult checkerResult = sandboxService.executeCode(checker.getCode(), checker.getLanguage(), checkerInput, 5000);
+        System.out.println("Checker run result: ExitCode=" + checkerResult.getExitCode() + ", Output=" + checkerResult.getOutput() + ", Error=" + checkerResult.getError());
+
+        // Testlib.h Exit codes:
+        // 0 = OK (Accepted)
+        // 1 = WA (Wrong Answer) 
+        // 2 = PE (Presentation Error)
+        // 3 = FAIL (Checker error)
         
-        if (checkerResult.getStatus().equals("SUCCESS")) {
-            // Giả định Checker in ra "AC", "WA", "PE" (Presentation Error)... ở dòng cuối cùng
-            String checkerOutput = checkerResult.getOutput().trim().toUpperCase();
-            if (checkerOutput.contains("AC") || checkerOutput.equals("ACCEPTED") || checkerOutput.equals("1") || checkerOutput.equals("TRUE")) {
-                return "AC";
-            } else {
-                return "WA";
-            }
+        if (checkerResult.getExitCode() == 0) {
+            return "AC";
+        } else if (checkerResult.getExitCode() == 1) {
+            return "WA";
+        } else if (checkerResult.getExitCode() == 2) {
+            return "PE"; // Có thể nhóm chung vào WA hoặc để PE
+        } else {
+            System.err.println("Checker thất bại hoặc lỗi nghiêm trọng: " + checkerResult.getError());
+            return "CHECKER_ERROR";
         }
-        
-        // Nếu bản thân file checker bị lỗi (Cố pháp / Lỗi khi chạy / Hết thời gian) 
-        System.err.println("Checker Error: " + checkerResult.getError());
-        return "CHECKER_ERROR"; 
     }
 
-    /**
-     * Chuẩn hóa: xóa khoảng trắng thừa cuối dòng và các dòng trống ở cuối
-     */
     private String normalizeString(String input) {
-        if (input == null) {
-            return "";
-        }
-        // Chuẩn hóa tất cả các loại xuống dòng (\r\n, \r) thành \n
+        if (input == null) return "";
         String normalized = input.replace("\r\n", "\n").replace("\r", "\n");
         String[] lines = normalized.split("\n", -1);
         StringBuilder sb = new StringBuilder();
