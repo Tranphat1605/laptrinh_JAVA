@@ -173,7 +173,7 @@ public class EvaluationController {
      * onStart() gọi đồng bộ trên luồng hiện tại (EDT).
      * Các callback còn lại gọi từ background thread — View tự bọc SwingUtilities nếu cần.
      */
-    public void runEvaluation(EvaluationListener listener) {
+    public void runEvaluation(String checkerCode, String acCode, String waCode, EvaluationListener listener) {
         listener.onStart();
 
         // Testcase: hiện dùng mock; có thể mở rộng nhận từ DB sau này
