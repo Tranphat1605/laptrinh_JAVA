@@ -9,6 +9,7 @@ import entity.Problem;
 import java.awt.*;
 import java.io.File;
 import javax.swing.*;
+import javax.swing.SwingUtilities;
 
 /**
  * View: chỉ chứa code xây dựng giao diện Swing.
@@ -36,6 +37,7 @@ public class TeacherFrame extends JFrame {
     private JTextArea    evalLogArea;
     private JProgressBar evalProgressBar;
     private JButton      btnRunEval;
+    private JLabel       lblEvalMode;
 
     public TeacherFrame() {
         setTitle("Giao Diện Giáo Viên (Sinh Đề & Testcase bằng AI)");
@@ -59,13 +61,50 @@ public class TeacherFrame extends JFrame {
 
     // ── Tab 1: Nhập đề & Phân tích ──────────────────────────────────────────
 
+    private static final String PLACEHOLDER_TEXT = "Paste đề thi IOI / ICPC bằng chữ vào đây...";
+
+    /** Kiểm tra đề bài đã nhập chưa, trả về true nếu hợp lệ. */
+    private boolean validateProblemInput() {
+        String text = problemInputArea.getText().trim();
+        if (text.isEmpty() || text.equals(PLACEHOLDER_TEXT)) {
+            JOptionPane.showMessageDialog(this,
+                "⚠ Vui lòng nhập nội dung đề bài vào ô bên trái trước khi gọi AI!",
+                "Chưa có đề bài", JOptionPane.WARNING_MESSAGE);
+            problemInputArea.requestFocus();
+            return false;
+        }
+        if (text.length() < 20) {
+            JOptionPane.showMessageDialog(this,
+                "⚠ Nội dung đề bài quá ngắn. Hãy nhập đầy đủ đề bài.",
+                "Đề bài không hợp lệ", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        return true;
+    }
+
     private JPanel createTab1() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        problemInputArea = new JTextArea("Paste đề thi IOI / ICPC bằng chữ vào đây...");
+        problemInputArea = new JTextArea(PLACEHOLDER_TEXT);
+        problemInputArea.setForeground(Color.GRAY);
         problemInputArea.setLineWrap(true);
         problemInputArea.setWrapStyleWord(true);
+        // Xóa placeholder khi người dùng bắt đầu nhập
+        problemInputArea.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusGained(java.awt.event.FocusEvent e) {
+                if (problemInputArea.getText().equals(PLACEHOLDER_TEXT)) {
+                    problemInputArea.setText("");
+                    problemInputArea.setForeground(Color.BLACK);
+                }
+            }
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                if (problemInputArea.getText().trim().isEmpty()) {
+                    problemInputArea.setText(PLACEHOLDER_TEXT);
+                    problemInputArea.setForeground(Color.GRAY);
+                }
+            }
+        });
         JScrollPane scroll1 = new JScrollPane(problemInputArea);
         scroll1.setBorder(BorderFactory.createTitledBorder("Nhập Đề thi (Text)"));
 
@@ -83,24 +122,25 @@ public class TeacherFrame extends JFrame {
         btnAnalyzeAI = new JButton("Phân tích đề bằng AI");
         btnAnalyzeAI.setBackground(new Color(60, 150, 255));
         btnAnalyzeAI.setForeground(Color.WHITE);
-        btnAnalyzeAI.addActionListener(e ->
+        btnAnalyzeAI.addActionListener(e -> {
+            if (!validateProblemInput()) return;  // Chặn nếu chưa nhập đề
             controller.analyzeProblem(problemInputArea.getText(), selectedImageFile,
                 new TeacherController.AnalysisListener() {
                     @Override public void onStart() {
-                        aiAnalysisLogArea.setText("Đang phân tích cấu trúc đề bài...\n\n");
+                        aiAnalysisLogArea.setText("⏳ Đang phân tích cấu trúc đề bài...\n\n");
                         btnAnalyzeAI.setEnabled(false);
                     }
                     @Override public void onComplete(Problem p) {
-                        aiAnalysisLogArea.append("Kết quả từ AI:\n" + p.getContent());
-                        aiAnalysisLogArea.append("\n\n... Hoàn thành phân tích.");
+                        aiAnalysisLogArea.append("✅ Kết quả từ AI:\n" + p.getContent());
+                        aiAnalysisLogArea.append("\n\n─── Hoàn thành phân tích. ───");
                         btnAnalyzeAI.setEnabled(true);
                     }
                     @Override public void onError(String msg) {
-                        aiAnalysisLogArea.append("\nLỗi kết nối tới AI: " + msg);
+                        aiAnalysisLogArea.append("\n❌ Lỗi: " + msg);
                         btnAnalyzeAI.setEnabled(true);
                     }
-                })
-        );
+                });
+        });
 
         bottomInputPanel.add(btnSelectImage);
         bottomInputPanel.add(lblImageStatus);
@@ -136,22 +176,24 @@ public class TeacherFrame extends JFrame {
         splitPane.setResizeWeight(0.5);
 
         JButton btnGen = new JButton("Yêu cầu AI sinh Testcase & Checker");
-        btnGen.addActionListener(e ->
+        btnGen.addActionListener(e -> {
+            if (!validateProblemInput()) return;
             controller.generateTestcaseAndChecker(problemInputArea.getText(),
                 new TeacherController.GenerationListener() {
                     @Override public void onStart() {
-                        generatorCodeArea.setText("// Đang gọi AI API sinh Generator...\n");
-                        checkerCodeArea.setText("// Đang gọi AI API sinh Checker...\n");
+                        generatorCodeArea.setText("// ⏳ Đang gọi AI sinh Generator...\n");
+                        checkerCodeArea.setText("// ⏳ Đang gọi AI sinh Checker...\n");
                     }
                     @Override public void onComplete(String gen, String check) {
                         generatorCodeArea.setText(gen);
                         checkerCodeArea.setText(check);
                     }
                     @Override public void onError(String msg) {
-                        generatorCodeArea.setText("Lỗi kết nối AI API: " + msg);
+                        generatorCodeArea.setText("// ❌ Lỗi: " + msg);
+                        checkerCodeArea.setText("");
                     }
-                })
-        );
+                });
+        });
 
         JPanel top = new JPanel();
         top.add(btnGen);
@@ -174,22 +216,24 @@ public class TeacherFrame extends JFrame {
         codePanel.add(new JScrollPane(sampleWAArea));
 
         JButton btnGen = new JButton("Yêu cầu AI tự động sinh Code mẫu Tốt / Xấu");
-        btnGen.addActionListener(e ->
+        btnGen.addActionListener(e -> {
+            if (!validateProblemInput()) return;
             controller.generateSampleCodes(problemInputArea.getText(),
                 new TeacherController.SampleCodeListener() {
                     @Override public void onStart() {
-                        sampleACArea.setText("Đang gọi AI suy nghĩ code tối ưu nhất (AC)...");
-                        sampleWAArea.setText("Đang tìm lỗi sai logic để lừa bằng mã WA...");
+                        sampleACArea.setText("⏳ Đang gọi AI sinh code tối ưu nhất (AC)...");
+                        sampleWAArea.setText("⏳ Đang tìm lỗi sai logic để tạo mã WA...");
                     }
                     @Override public void onComplete(String ac, String wa) {
                         sampleACArea.setText(ac);
                         sampleWAArea.setText(wa);
                     }
                     @Override public void onError(String msg) {
-                        sampleACArea.setText("Lỗi: " + msg);
+                        sampleACArea.setText("❌ Lỗi: " + msg);
+                        sampleWAArea.setText("");
                     }
-                })
-        );
+                });
+        });
 
         JPanel pnl = new JPanel(new BorderLayout());
         pnl.add(btnGen, BorderLayout.NORTH);
@@ -203,18 +247,25 @@ public class TeacherFrame extends JFrame {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
         panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-        // Top: nút + progress bar
-        btnRunEval = new JButton("Khởi chạy kiểm thử");
+        // Top: nút + progress bar + nhãn chế độ
+        btnRunEval = new JButton("▶ Khởi chạy kiểm thử");
         btnRunEval.setFont(new Font("Arial", Font.BOLD, 13));
+        btnRunEval.setBackground(new Color(34, 139, 34));
+        btnRunEval.setForeground(Color.WHITE);
         btnRunEval.addActionListener(e -> runEvaluation());
 
         evalProgressBar = new JProgressBar(0, 100);
         evalProgressBar.setStringPainted(true);
         evalProgressBar.setPreferredSize(new Dimension(350, 26));
 
+        lblEvalMode = new JLabel("Chế độ: Mock (chưa có code từ Tab 2/3)");
+        lblEvalMode.setForeground(new Color(150, 80, 0));
+        lblEvalMode.setFont(new Font("Arial", Font.ITALIC, 12));
+
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
         topPanel.add(btnRunEval);
         topPanel.add(evalProgressBar);
+        topPanel.add(lblEvalMode);
 
         // Log area
         evalLogArea = new JTextArea();
@@ -222,7 +273,7 @@ public class TeacherFrame extends JFrame {
         evalLogArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
         evalLogArea.setMargin(new Insets(6, 8, 6, 8));
         JScrollPane scroll = new JScrollPane(evalLogArea);
-        scroll.setBorder(BorderFactory.createTitledBorder("Báo cáo đánh giá"));
+        scroll.setBorder(BorderFactory.createTitledBorder("Báo cáo đánh giá Chất lượng Testcase"));
 
         panel.add(topPanel, BorderLayout.NORTH);
         panel.add(scroll,   BorderLayout.CENTER);
@@ -230,13 +281,33 @@ public class TeacherFrame extends JFrame {
     }
 
     private void runEvaluation() {
-        evalController.runEvaluation(new EvaluationController.EvaluationListener() {
+        // Lấy code thực từ Tab 2 (Checker) và Tab 3 (AC, WA)
+        String checkerCode = (checkerCodeArea != null) ? checkerCodeArea.getText().trim() : "";
+        String acCode      = (sampleACArea   != null) ? sampleACArea.getText().trim()   : "";
+        String waCode      = (sampleWAArea   != null) ? sampleWAArea.getText().trim()   : "";
+
+        // Bỏ qua nếu còn là placeholder mặc định (chưa sinh)
+        if (checkerCode.startsWith("// Đang")) checkerCode = "";
+        if (acCode.startsWith("Đang gọi"))    acCode      = "";
+        if (waCode.startsWith("Đang tìm"))    waCode      = "";
+
+        // Cập nhật nhãn chế độ
+        boolean usingReal = !acCode.isEmpty() || !waCode.isEmpty();
+        lblEvalMode.setText(usingReal
+            ? "✅ Chế độ: Dữ liệu thực từ Tab 2 & 3"
+            : "⚠ Chế độ: Mock (Tab 2/3 chưa sinh code)");
+        lblEvalMode.setForeground(usingReal ? new Color(0, 120, 0) : new Color(150, 80, 0));
+
+        final String fc = checkerCode, fa = acCode, fw = waCode;
+        evalController.runEvaluation(fc, fa, fw, new EvaluationController.EvaluationListener() {
             @Override public void onStart() {
                 btnRunEval.setEnabled(false);
                 evalProgressBar.setValue(0);
                 evalProgressBar.setString("Đang khởi động...");
-                evalLogArea.setText("=== KHỞI CHẠY KIỂM THỬ ===\n\n");
-                evalLog("Đang nạp dữ liệu mock...\n");
+                evalLogArea.setText("=== KHỞI CHẠY KIỂM THỬ ===\n");
+                evalLog(usingReal
+                    ? "Sử dụng code thực từ Tab 2 (Checker) & Tab 3 (AC/WA)...\n\n"
+                    : "[MOCK] Chưa có code từ Tab 2/3, dùng dữ liệu mẫu...\n\n");
             }
             @Override public void onProgress(int cur, int tot, String status) {
                 SwingUtilities.invokeLater(() -> {
@@ -249,22 +320,33 @@ public class TeacherFrame extends JFrame {
                     evalProgressBar.setValue(100);
                     evalProgressBar.setString("Hoàn thành");
                     btnRunEval.setEnabled(true);
-                    evalLog("\n=== KẾT QUẢ CHI TIẾT ===\n");
+
+                    // Kết quả chi tiết từng testcase
+                    evalLog("\n─────────── KẾT QUẢ THỰC THI ───────────\n");
                     for (EvaluationResult res : report.getDetailedResults()) {
-                        evalLog(String.format("Code #%d | Testcase #%d | %s | %dms%n",
-                            res.getSubmissionId(), res.getTestcaseId(),
+                        String icon = "AC".equals(res.getStatus()) ? "✅" : "❌";
+                        evalLog(String.format("%s Code #%d | TC #%d | %-3s | %dms%n",
+                            icon, res.getSubmissionId(), res.getTestcaseId(),
                             res.getStatus(), res.getExecutionTimeMs()));
-                        if (!"AC".equals(res.getStatus()))
-                            evalLog("  → Output: \"" + res.getActualOutput().trim() + "\"\n");
+                        if (!"AC".equals(res.getStatus()) && res.getActualOutput() != null)
+                            evalLog("   → Output: \"" + res.getActualOutput().trim() + "\"\n");
                     }
-                    evalLog("\n" + report.generateSummary() + "\n");
+
+                    // Tổng kết + cảnh báo yếu testcase từ EvaluationService
+                    evalLog("\n═══════════════════════════════════════\n");
+                    evalLog(report.generateSummary());
+
+                    // Highlight nếu không có cảnh báo
+                    if (report.getWarnings().isEmpty()) {
+                        evalLog("\n🏆 Bộ testcase ĐỦ MẠNH — AC pass, WA/TLE bị bắt đúng!\n");
+                    }
                 });
             }
             @Override public void onError(Exception e) {
                 SwingUtilities.invokeLater(() -> {
                     evalProgressBar.setString("Lỗi");
                     btnRunEval.setEnabled(true);
-                    evalLog("\n❌ LỖI: " + e.getMessage() + "\n");
+                    evalLog("\n❌ LỖI HỆ THỐNG: " + e.getMessage() + "\n");
                 });
             }
         });

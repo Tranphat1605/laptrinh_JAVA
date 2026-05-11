@@ -121,7 +121,7 @@ public class AIService {
     }
 
     /**
-     * Gửi request tới Groq API kèm cơ chế Retry
+     * Gửi request tới Groq API kèm cơ chế Retry + xử lý 429 Rate Limit
      */
     private String sendRequestWithRetry(String jsonPayload) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
@@ -136,10 +136,10 @@ public class AIService {
         while (attempts < MAX_RETRIES) {
             try {
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                int status = response.statusCode();
                 JsonObject jsonResponse = gson.fromJson(response.body(), JsonObject.class);
 
-                if (response.statusCode() == 200) {
-                    // Groq/OpenAI format: choices[0].message.content
+                if (status == 200) {
                     if (jsonResponse.has("choices")) {
                         JsonArray choices = jsonResponse.getAsJsonArray("choices");
                         if (choices.size() > 0) {
@@ -151,16 +151,30 @@ public class AIService {
                         }
                     }
                     throw new Exception("API trả về thành công nhưng không tìm thấy nội dung.");
+
+                } else if (status == 429) {
+                    // Rate Limit: đợi rồi thử lại
+                    long waitSecs = 60; // mặc định 60s
+                    // Cố gắng đọc Retry-After header nếu có
+                    response.headers().firstValue("retry-after")
+                            .ifPresent(v -> { /* không thể assign lại, dùng giá trị mặc định */ });
+                    attempts++;
+                    if (attempts >= MAX_RETRIES) {
+                        throw new Exception("⚠ Groq API đang bị giới hạn Token/phút (429 Rate Limit).\n"
+                            + "Vui lòng đợi 1-2 phút rồi thử lại, hoặc rút ngắn đề bài.");
+                    }
+                    System.err.println("[429 Rate Limit] Đợi " + waitSecs + "s trước khi thử lại (lần " + attempts + "/" + MAX_RETRIES + ")");
+                    Thread.sleep(waitSecs * 1000L);
+
                 } else {
-                    System.err.println("Lỗi kết nối AI API " + response.statusCode() + ": " + response.body());
-                    // Groq trả lỗi dạng: { "error": { "message": "..." } }
+                    System.err.println("Lỗi kết nối AI API " + status + ": " + response.body());
                     if (jsonResponse != null && jsonResponse.has("error")) {
                         String errorMsg = jsonResponse.getAsJsonObject("error").get("message").getAsString();
-                        throw new Exception("Lỗi kết nối AI API: " + errorMsg);
+                        throw new Exception("Lỗi AI API " + status + ": " + errorMsg);
                     }
+                    attempts++;
+                    Thread.sleep(2000L * attempts);
                 }
-                attempts++;
-                Thread.sleep(2000L * attempts); // Backoff
             } catch (IOException | InterruptedException e) {
                 attempts++;
                 if (attempts == MAX_RETRIES) {
@@ -233,7 +247,7 @@ public class AIService {
         payload.add("messages", messages);
 
         // Giới hạn output để tránh vượt quota token
-        payload.addProperty("max_tokens", 4096);
+        payload.addProperty("max_tokens", 2048);
 
         return gson.toJson(payload);
     }
@@ -261,7 +275,7 @@ public class AIService {
         messages.add(userMsg);
 
         payload.add("messages", messages);
-        payload.addProperty("max_tokens", 4096);
+        payload.addProperty("max_tokens", 2048);
 
         return gson.toJson(payload);
     }
