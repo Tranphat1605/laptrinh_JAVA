@@ -14,8 +14,9 @@ public class JavaExecutor extends BaseCodeExecutor {
 
             // Biên dịch
             ProcessBuilder compilePb = new ProcessBuilder("javac", sourceFile.getAbsolutePath());
-            ExecutionResult compileResult = runProcess(compilePb, "", 10000);
-            if (compileResult.getError() != null && !compileResult.getError().isEmpty() && compileResult.getStatus().equals("RTE")) {
+            ExecutionResult compileResult = runProcess(compilePb, "", 10000, false); // Không cần đo CPU lúc biên dịch
+            if (compileResult.getError() != null && !compileResult.getError().isEmpty() && 
+                (compileResult.getStatus().equals("RTE") || compileResult.getStatus().equals("TLE"))) {
                 return new ExecutionResult("CE", "", compileResult.getError(), 0);
             }
 
