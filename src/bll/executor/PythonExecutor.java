@@ -6,17 +6,42 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class PythonExecutor extends BaseCodeExecutor {
+
+    @Override
+    public ExecutionResult compile(Path tempDir, String code) throws Exception {
+        File sourceFile = new File(tempDir.toFile(), "Main.py");
+        Files.writeString(sourceFile.toPath(), code);
+
+        String pythonCmd = findPythonCommand();
+
+        // Kiểm tra lỗi cú pháp
+        ProcessBuilder compilePb = new ProcessBuilder(pythonCmd, "-m", "py_compile", sourceFile.getAbsolutePath());
+        ExecutionResult compileResult = runProcess(compilePb, "", 5000, false);
+        
+        if (!compileResult.getStatus().equals("SUCCESS")) {
+            return new ExecutionResult("CE", "", compileResult.getError(), 0, compileResult.getExitCode());
+        }
+        return new ExecutionResult("SUCCESS", "", "", 0, 0);
+    }
+
+    @Override
+    public ExecutionResult runCode(Path tempDir, String input, long timeLimitMs) throws Exception {
+        String pythonCmd = findPythonCommand();
+        File sourceFile = new File(tempDir.toFile(), "Main.py");
+
+        ProcessBuilder runPb = new ProcessBuilder(pythonCmd, sourceFile.getAbsolutePath());
+        // Trừ bì Python chậm hơn, nhân hệ số x3 limit
+        return runProcess(runPb, input, timeLimitMs * 3);
+    }
+
     @Override
     public ExecutionResult execute(Path tempDir, String code, String input, long timeLimitMs) throws Exception {
-        File sourceFile = new File(tempDir.toFile(), "Main.py");
         try {
-            Files.writeString(sourceFile.toPath(), code);
-
-            // Tự động tìm lệnh Python phù hợp
-            String pythonCmd = findPythonCommand();
-
-            ProcessBuilder pb = new ProcessBuilder(pythonCmd, sourceFile.getAbsolutePath());
-            return runProcess(pb, input, timeLimitMs);
+            ExecutionResult compileResult = compile(tempDir, code);
+            if (!compileResult.getStatus().equals("SUCCESS")) {
+                return compileResult;
+            }
+            return runCode(tempDir, input, timeLimitMs);
         } finally {
             // Dọn dẹp tệp tạm thời và thư mục tạm
             try {

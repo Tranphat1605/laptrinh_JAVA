@@ -55,7 +55,7 @@ public abstract class BaseCodeExecutor implements CodeExecutor {
                 process.destroyForcibly();
                 stdoutConsumer.interrupt();
                 stderrConsumer.interrupt();
-                return new ExecutionResult("TLE", "", "Time Limit Exceeded (Watchdog)", timeLimitMs * 2);
+                return new ExecutionResult("TLE", "", "Time Limit Exceeded (Watchdog)", timeLimitMs * 2, -1);
             }
 
             // Chờ các luồng đọc hoàn tất việc nhận dữ liệu
@@ -96,20 +96,25 @@ public abstract class BaseCodeExecutor implements CodeExecutor {
             // Đánh giá TLE dựa trên phần trăm CPU thực thụ
             // Cho phép bù trừ độ trễ khởi động JVM tốn khoảng 50ms-100ms
             if (measureCpu && executionTimeMs > timeLimitMs) {
-                return new ExecutionResult("TLE", output, error, executionTimeMs);
+                return new ExecutionResult("TLE", output, error, executionTimeMs, process.exitValue());
             }
 
-            if (process.exitValue() != 0) {
-                return new ExecutionResult("RTE", output, error, executionTimeMs);
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                return new ExecutionResult("RTE", output, error, executionTimeMs, exitCode);
             }
 
-            return new ExecutionResult("SUCCESS", output, error, executionTimeMs);
+            return new ExecutionResult("SUCCESS", output, error, executionTimeMs, exitCode);
         } catch (Exception e) {
             long executionTimeMs = (System.nanoTime() - startTimeNano) / 1_000_000;
+            int exitCode = -1;
             if (process != null) {
+                try {
+                    exitCode = process.exitValue();
+                } catch (IllegalThreadStateException ignored) {} // chưa thoát
                 process.destroyForcibly();
             }
-            return new ExecutionResult("RTE", "", e.getMessage(), executionTimeMs);
+            return new ExecutionResult("RTE", "", e.getMessage(), executionTimeMs, exitCode);
         }
     }
 

@@ -8,7 +8,6 @@ import entity.SampleCode;
 import entity.TestCase;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -60,6 +59,15 @@ public class EvaluationController {
                 listener.onProgress(0, totalCases, "Đang gọi AI sinh Solution Code AC (C++)...");
                 String acCode = aiService.generateSampleCode(problem, "AC");
 
+                listener.onProgress(0, totalCases, "Đang gọi AI sinh Checker Code (C++)...");
+                String checkerCodeRaw = aiService.generateChecker(problem);
+                
+                // Lưu Checker vào Database
+                entity.Checker checker = new entity.Checker(0, problem != null ? problem.getId() : 1, cleanMarkdown(checkerCodeRaw), "cpp");
+                dal.CheckerDAO checkerDAO = new dal.CheckerDAO();
+                int checkerId = checkerDAO.addChecker(checker);
+                if (checkerId > 0) checker.setId(checkerId);
+
                 // Thư mục tạm
                 Path tempDir = Files.createTempDirectory("auto_pipeline_");
                 // Copy testlib.h vào thư mục tạm để biên dịch Generator
@@ -96,6 +104,9 @@ public class EvaluationController {
 
                 // 4. Vòng lặp Sinh Input & Lấy Output chuẩn
                 List<TestCase> testCases = new ArrayList<>();
+                dal.TestCaseDAO tcDAO = new dal.TestCaseDAO();
+                int problemId = problem != null ? problem.getId() : 1;
+                
                 for (int i = 0; i < totalCases; i++) {
                     String currentMode = modeList.get(i);
                     String seed = String.valueOf(System.currentTimeMillis() + i);
@@ -117,8 +128,13 @@ public class EvaluationController {
                     String expectedOutput = new String(runAc.getInputStream().readAllBytes());
                     runAc.waitFor(5, TimeUnit.SECONDS);
 
-                    // Add TestCase
-                    testCases.add(new TestCase(i + 1, problem != null ? problem.getId() : 1, generatedInput, expectedOutput, false, currentMode));
+                    // Add TestCase & Lưu DB
+                    TestCase tc = new TestCase(0, problemId, generatedInput, expectedOutput, false, currentMode);
+                    tcDAO.addTestCase(tc); // Lưu vào cơ sở dữ liệu
+                    
+                    // Vì DAO có thể không gán ID trực tiếp vào Object, ta cứ add vào List (Trong thực tế cần lấy lại ID tự tăng nếu EvaluationService dùng)
+                    // (Tuy nhiên EvaluationService chỉ duyệt mảng không phụ thuộc ID cứng)
+                    testCases.add(tc);
                 }
 
                 // Dọn dẹp thư mục tạm
@@ -128,13 +144,19 @@ public class EvaluationController {
                 // 5. Xin AI thêm WA, TLE sample code để Test
                 listener.onProgress(totalCases, totalCases, "Đang sinh các Sample Code độc hại (WA, TLE)...");
                 List<SampleCode> sampleCodes = new ArrayList<>();
-                sampleCodes.add(new SampleCode(cleanMarkdown(acCode), "cpp", "AC"));
-                sampleCodes.add(new SampleCode(cleanMarkdown(aiService.generateSampleCode(problem, "WA")), "cpp", "WA"));
-                sampleCodes.add(new SampleCode(cleanMarkdown(aiService.generateSampleCode(problem, "TLE")), "cpp", "TLE"));
+                sampleCodes.add(new SampleCode(problemId, cleanMarkdown(acCode), "cpp", "AC"));
+                sampleCodes.add(new SampleCode(problemId, cleanMarkdown(aiService.generateSampleCode(problem, "WA")), "cpp", "WA"));
+                sampleCodes.add(new SampleCode(problemId, cleanMarkdown(aiService.generateSampleCode(problem, "TLE")), "cpp", "TLE"));
+
+                // Lưu các Sample Code vừa sinh vào DB
+                dal.SampleCodeDAO sampleCodeDAO = new dal.SampleCodeDAO();
+                for (SampleCode sc : sampleCodes) {
+                    sampleCodeDAO.addSampleCode(sc);
+                }
 
                 // 6. Ném vào EvaluationTask để chạy Sandbox đánh giá sức mạnh
                 EvaluationTask task = new EvaluationTask(
-                    testCases, sampleCodes, null, 1500L,
+                    testCases, sampleCodes, checker, 1500L,
                     new EvaluationTask.EvaluationListener() {
                         @Override public void onProgress(int cur, int tot, String status) {
                             listener.onProgress(cur, tot, "Đánh giá Sandbox: " + status);

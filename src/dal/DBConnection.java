@@ -5,7 +5,6 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public class DBConnection {
-    private static Connection connection = null;
 
     // //TODO: Thay đổi mật khẩu và port cho khớp với SQL Server trên máy bạn/máy Chiến
     // private static final String SERVER_NAME = "CHIENTRUONG";
