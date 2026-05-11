@@ -26,6 +26,21 @@ public class TestCaseDAO {
         }
     }
 
+    public boolean updateTestCaseStrength(int testCaseId, String newStrength) {
+        String sql = "UPDATE TestCase SET strengthStatus = ? WHERE id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, newStrength);
+            pstmt.setInt(2, testCaseId);
+
+            return pstmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     public List<TestCase> getTestCasesByProblemId(int problemId) {
         List<TestCase> list = new ArrayList<>();
         String sql = "SELECT * FROM TestCase WHERE problemId = ?";

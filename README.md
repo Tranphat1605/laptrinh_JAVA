@@ -157,3 +157,43 @@ CREATE TABLE Checker (
   language NVARCHAR(64),
   CONSTRAINT FK_Checker_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE
 );
+//thay đổi tóm tắt ngữ cảnh 
+1. Phá bỏ giới hạn Testcase cứng (Hardcoded)
+Trước đây: Hệ thống chỉ chạy đúng 2 Testcase được gán tay trong hàm buildMockTestCases().
+Hiện tại: Chuyển đổi thành công sang kiến trúc tự động, cho phép truyền vào con số bất kỳ (ví dụ: 20, 50, hay 100 testcase) thông qua hàm runAutomatedEvaluation.
+2. Thuật toán bao phủ toàn diện (Coverage Strategy)
+Hệ thống không còn sinh testcase vô tri nữa, mà tự động áp dụng công thức phân bổ thông minh:
+20% Edge Cases (Biên dễ/khó): Bẫy các ranh giới như mảng rỗng, N=0, số cực âm...
+20% Max Cases (Giới hạn chịu tải): Nhồi N tối đa (
+10
+5
+10 
+5
+ , 
+10
+6
+10 
+6
+ ) nhằm bóp nghẹt thuật toán 
+O
+(
+n
+2
+)
+O(n 
+2
+ ), ép lòi ra lỗi TLE (Quá thời gian) hoặc MLE (Tràn bộ nhớ).
+60% Random Cases: Testcase phổ thông để kiểm tra độ đúng đắn tổng quát.
+3. Giải quyết bài toán Biên dịch nội bộ (Compilation & testlib.h)
+Vấn đề: AI chỉ trả về Text C++, không thể chạy trực tiếp, lại còn thiếu thư viện thi đấu.
+Giải quyết: Đã tải và tích hợp thành công thư viện chuẩn testlib.h vào thư mục lib.
+Cơ chế tạm thời (Temp Workspace): Mỗi lần chạy, Java sẽ tự gom testlib.h, mã gen.cpp (Generator) và ac.cpp (Code giải chuẩn) vào một thư mục tạm, dùng lệnh g++ -O2 -std=c++17 để biên dịch trực tiếp ra mã máy .exe.
+4. Chốt luồng Đánh giá sức mạnh (Testcase Strength Engine) cực mượt
+Chúng ta đã hoàn thiện 1 vòng đời (Lifecycle) tự hành của Evaluation Controller:
+
+[AI] Sinh Code Sinh dữ liệu (Generator).
+[AI] Sinh Code Mẫu AC (Đúng tuyệt đối).
+[Java Backend] Biên dịch 2 code trên ra .exe.
+[Vòng lặp siêu tốc] Ép Generator đẻ ra Input -> Ném Input vào Code AC để moi ra Expected Output -> Gom thành Testcase lưu CSDL.
+[AI] Ép AI đẻ ra thêm 2 Code độc hại: WA (Sai biên) và TLE (Lặp vét cạn).
+[Sandbox] Bơm toàn bộ đống code và testcase vào hệ thống Sandbox lõi (BaseCodeExecutor) với chống vòng lặp vô hạn & chống tràn buffer để đánh giá xem: Testcase nào giết được bài WA/TLE thì phong là "Strong Target", Testcase nào để lọt thì bị trừ điểm
