@@ -55,10 +55,15 @@ public class SandboxService {
             
             compilePb.redirectErrorStream(true);
             Process compileProcess = compilePb.start();
-            boolean compiled = compileProcess.waitFor(15000, java.util.concurrent.TimeUnit.MILLISECONDS);
+            // testlib.h là thư viện rất nặng (gần 2000 dòng code), trên Windows (MinGW) g++ có thể mất 30s-40s để biên dịch.
+            boolean compiled = compileProcess.waitFor(60000, java.util.concurrent.TimeUnit.MILLISECONDS);
             if (!compiled || compileProcess.exitValue() != 0 || !exeFile.exists()) {
+                // Nếu timeout thì process vẫn sống -> kill luôn. Còn lỗi biên dịch thì process đã chết -> đọc lỗi
+                if (!compiled && compileProcess.isAlive()) {
+                    compileProcess.destroyForcibly();
+                    return new ExecutionResult("CE", "", "Lỗi biên dịch Checker: Quá thời gian (Tối đa 60s).", 0, -1);
+                }
                 String error = new String(compileProcess.getInputStream().readAllBytes());
-                if (compileProcess.isAlive()) compileProcess.destroyForcibly();
                 return new ExecutionResult("CE", "", "Lỗi biên dịch Checker:\n" + error, 0, compileProcess.exitValue());
             }
             

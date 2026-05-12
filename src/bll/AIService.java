@@ -130,8 +130,10 @@ public class AIService {
                 "- BẮT BUỘC sử dụng: ans.read... để đọc đáp án chuẩn.\n" +
                 "- BẮT BUỘC sử dụng: ouf.read... để đọc output của thí sinh.\n" +
                 "- CHÚ Ý CÚ PHÁP TESTLIB.H: Hàm đọc trả về trực tiếp giá trị (VD: `long long a = ans.readLong();` hoặc `int b = ouf.readInt();`). TUYỆT ĐỐI KHÔNG truyền tham chiếu vào hàm (như `ans.readLong(a)` - Cú pháp này sai và sẽ gây lỗi biên dịch).\n" +
+                "- LƯU Ý VỀ TÊN BIẾN: TUYỆT ĐỐI KHÔNG đặt tên biến cục bộ là `ans`, `ouf`, `inf` (VD: KHÔNG viết `int ans = ans.readInt();`) vì sẽ làm hỏng đối tượng stream của testlib. Hãy dùng `jury_ans`, `contestant_ans`, `ouf_ans`.\n" +
                 "- TUYỆT ĐỐI KHÔNG SỬ DỤNG std::cin hay std::cout hay scanf/printf.\n" +
                 "- Gọi quitf(_ok, ...) nếu đúng, hoặc quitf(_wa, ...) nếu sai.\n" +
+                "- LƯU Ý RẤT QUAN TRỌNG: TUYỆT ĐỐI KHÔNG ĐƯỢC QUÊN DẤU GẠCH DƯỚI khi gọi mã trạng thái. BẮT BUỘC phải dùng `_wa`, `_ok`, `_pe`. TUYỆT ĐỐI KHÔNG sử dụng `wa`, `ok`, `pe`.\n" +
                 "Chỉ trả về code C++, không markdown.";
         String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
         return sendRequestWithRetry(payload);
