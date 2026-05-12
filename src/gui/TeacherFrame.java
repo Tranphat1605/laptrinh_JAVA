@@ -59,7 +59,7 @@ public class TeacherFrame extends JFrame {
         setLayout(new BorderLayout());
 
         // API key chỉ cần đặt ở 1 chỗ này
-        controller     = new TeacherController("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");
+        controller     = new TeacherController("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");
         evalController = new EvaluationController();
 
         // Top: Stepper
