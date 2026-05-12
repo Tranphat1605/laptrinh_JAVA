@@ -12,11 +12,11 @@ public class DBConnection {
     // private static final String DATABASE_NAME = "DCPNDB";
     // private static final String USERNAME = "sa";
     // private static final String PASSWORD = "03062006";
-    private static final String SERVER_NAME = "localhost";
+    private static final String SERVER_NAME = "DESKTOP-IHI30RF";
     private static final String PORT = "1433";
     private static final String DATABASE_NAME = "DCPNDB";
     private static final String USERNAME = "SA";
-    private static final String PASSWORD = "MyPass@2024";
+    private static final String PASSWORD = "123123";
     private static final String URL = "jdbc:sqlserver://" + SERVER_NAME + ":" + PORT +
             ";databaseName=" + DATABASE_NAME +
             ";encrypt=true;trustServerCertificate=true;";
