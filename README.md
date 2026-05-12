@@ -180,3 +180,24 @@ CREATE TABLE Checker (
 [Vòng lặp siêu tốc] Ép Generator đẻ ra Input -> Ném Input vào Code AC để moi ra Expected Output -> Gom thành Testcase lưu CSDL.
 [AI] Ép AI đẻ ra thêm 2 Code độc hại: WA (Sai biên) và TLE (Lặp vét cạn).
 [Sandbox] Bơm toàn bộ đống code và testcase vào hệ thống Sandbox lõi (BaseCodeExecutor) với chống vòng lặp vô hạn & chống tràn buffer để đánh giá xem: Testcase nào giết được bài WA/TLE thì phong là "Strong Target", Testcase nào để lọt thì bị trừ điểm
+Dưới đây là tóm tắt toàn bộ các vấn đề hệ thống gặp phải và cách chúng ta đã xử lý trong phiên làm việc này:
+
+1. Lỗi biên dịch C++ Generator (Thiếu thư viện):
+
+Vấn đề: Khi sinh testcase, file C++ báo lỗi không nhận diện được cout và endl.
+Xử lý: Cập nhật Prompt của AI trong AIService.java để ép buộc AI luôn phải thêm #include <iostream> và using namespace std; ở đầu file Generator.
+2. Vị trí cấu hình API Key:
+
+Vấn đề: Thay đổi API Key (Groq) cho chức năng AI.
+Xử lý: Cấu hình được đặt cứng tại file TeacherFrame.java (dòng khởi tạo TeacherController). Hướng dẫn bạn thay chuỗi "gsk_..." thành key mới của bạn.
+3. Lỗi TIMEOUT khi biên dịch code (Compile):
+
+Vấn đề: Trình biên dịch C++ (g++) có kèm cờ -O2 phân tích thư viện testlib.h mất nhiều thời gian, giới hạn 15 giây bị quá hạn khiến tiến trình bị ép đóng (báo lỗi TIMEOUT ở bước Compile).
+Xử lý: Nâng thời gian chờ ở bước biên dịch trong EvaluationController.java từ 15 giây lên 60 giây.
+4. Lỗi kẹt tiến trình (Deadlock) và TIMEOUT khi chạy testcase lớn (1e6, 1e9):
+
+Vấn đề: Khi sinh dữ liệu siêu lớn, hệ thống bị treo mãi ở 1 testcase và văng lỗi TIMEOUT (hoặc đứng im). Nguyên nhân là do Deadlock bộ đệm hệ điều hành (OS Buffer): lệnh C++ in quá nhiều text làm tràn bộ đệm (chỉ có khoảng 4-8KB) và đứng chờ Java đọc, nhưng Java lại đang dùng lệnh .waitFor() để chờ C++ chạy xong mới đọc. Kết quả là 2 bên chờ nhau vĩnh viễn.
+Xử lý:
+Nâng thời gian chờ thực thi (execution) lên tối đa 5 phút (300 giây).
+Thay đổi cơ chế I/O trong EvaluationController.java: Chuyển từ việc luân chuyển dữ liệu qua RAM/Buffer sang việc ghi thẳng xuống ổ cứng dưới dạng các file vật lý (input_i.txt, output_i.txt) thông qua redirectOutput và redirectInput. Sau khi quá trình C++ kết thúc an toàn, Java mới đọc nội dung từ file để lưu vào Database.
+Các cải tiến này giúp hệ thống của bạn hoạt động mượt mà, chịu tải được bộ dữ liệu khổng lồ chuẩn thi đấu mà không lo bị ngốn vi xử lý hay xung đột bộ nhớ.

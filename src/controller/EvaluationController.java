@@ -189,7 +189,7 @@ public class EvaluationController {
                 ProcessBuilder pbGen = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), genCpp.getAbsolutePath(), "-o", genExe.getAbsolutePath());
                 pbGen.redirectErrorStream(true);
                 Process pGen = pbGen.start();
-                if (!pGen.waitFor(15, TimeUnit.SECONDS) || pGen.exitValue() != 0) {
+                if (!pGen.waitFor(60, TimeUnit.SECONDS) || pGen.exitValue() != 0) {
                     String err = new String(pGen.getInputStream().readAllBytes());
                     if (pGen.isAlive()) pGen.destroyForcibly();
                     throw new Exception("Biên dịch Generator thất bại! Exit: " + (pGen.isAlive() ? "TIMEOUT" : pGen.exitValue()) + " Lỗi: " + err);
@@ -203,7 +203,7 @@ public class EvaluationController {
                 ProcessBuilder pbAc = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), acCpp.getAbsolutePath(), "-o", acExe.getAbsolutePath());
                 pbAc.redirectErrorStream(true);
                 Process pAc = pbAc.start();
-                if (!pAc.waitFor(15, TimeUnit.SECONDS) || pAc.exitValue() != 0) {
+                if (!pAc.waitFor(60, TimeUnit.SECONDS) || pAc.exitValue() != 0) {
                     String err = new String(pAc.getInputStream().readAllBytes());
                     if (pAc.isAlive()) pAc.destroyForcibly();
                     throw new Exception("Biên dịch AC Code thất bại! Exit: " + (pAc.isAlive() ? "TIMEOUT" : pAc.exitValue()) + " Lỗi: " + err);
@@ -217,19 +217,29 @@ public class EvaluationController {
                     String seed = String.valueOf(System.currentTimeMillis() + i);
                     listener.onProgress(i, totalCases, "Đang sinh Testcase " + (i + 1) + "/" + totalCases + " (Mode: " + currentMode + ")");
                     
+                    File inputTxt = new File(tempDir.toFile(), "input_" + i + ".txt");
+                    File outputTxt = new File(tempDir.toFile(), "output_" + i + ".txt");
+
                     ProcessBuilder pbRunGen = new ProcessBuilder(genExe.getAbsolutePath(), seed, currentMode);
+                    pbRunGen.redirectOutput(inputTxt);
                     Process runGen = pbRunGen.start();
-                    String generatedInput = new String(runGen.getInputStream().readAllBytes());
-                    runGen.waitFor(5, TimeUnit.SECONDS);
+                    
+                    if (!runGen.waitFor(300, TimeUnit.SECONDS)) {
+                        runGen.destroyForcibly();
+                        throw new Exception("Quá thời gian sinh Testcase (5 phút). Có thể file quá lớn hoặc vòng lặp vô hạn!");
+                    }
+                    String generatedInput = Files.readString(inputTxt.toPath());
 
                     ProcessBuilder pbRunAc = new ProcessBuilder(acExe.getAbsolutePath());
+                    pbRunAc.redirectInput(inputTxt);
+                    pbRunAc.redirectOutput(outputTxt);
                     Process runAc = pbRunAc.start();
-                    runAc.getOutputStream().write(generatedInput.getBytes());
-                    runAc.getOutputStream().flush();
-                    runAc.getOutputStream().close();
                     
-                    String expectedOutput = new String(runAc.getInputStream().readAllBytes());
-                    runAc.waitFor(5, TimeUnit.SECONDS);
+                    if (!runAc.waitFor(300, TimeUnit.SECONDS)) {
+                        runAc.destroyForcibly();
+                        throw new Exception("Quá thời gian thực thi mã chuẩn AC chạy Testcase (5 phút).");
+                    }
+                    String expectedOutput = Files.readString(outputTxt.toPath());
 
                     // Insert vào CSDL
                     TestCase tc = new TestCase();
