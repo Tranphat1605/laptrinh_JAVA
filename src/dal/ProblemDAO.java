@@ -10,7 +10,7 @@ public class ProblemDAO {
     public boolean addProblem(Problem problem) {
         String sql = "INSERT INTO Problem (title, content, timeLimitMs, memoryLimitMb, source) VALUES (?, ?, ?, ?, ?)";
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
             pstmt.setString(1, problem.getTitle());
             pstmt.setString(2, problem.getContent());
@@ -18,7 +18,16 @@ public class ProblemDAO {
             pstmt.setInt(4, problem.getMemoryLimitMb());
             pstmt.setString(5, problem.getSource());
 
-            return pstmt.executeUpdate() > 0;
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                try (ResultSet rs = pstmt.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        problem.setId(rs.getInt(1));
+                        return true;
+                    }
+                }
+            }
+            return false;
         } catch (SQLException e) {
             e.printStackTrace();
             return false;

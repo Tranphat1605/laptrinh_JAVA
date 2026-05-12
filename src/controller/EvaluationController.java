@@ -7,7 +7,6 @@ import entity.EvaluationReport;
 import entity.Problem;
 import entity.SampleCode;
 import entity.TestCase;
-
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,9 +16,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Controller điều phối logic đánh giá chất lượng Testcase.
- * Nhận dữ liệu thực từ TeacherFrame (checker, ac, wa code) hoặc
- * dùng mock data mặc định khi các trường được để trống.
+ * Nhận dữ liệu thực từ TeacherFrame (checker, ac, wa code).
  */
 public class EvaluationController {
 
@@ -64,6 +61,9 @@ public class EvaluationController {
                 String checkerCodeRaw = aiService.generateChecker(problem);
                 
                 // Lưu Checker vào Database
+                if (problem != null && problem.getId() <= 0) {
+                    new dal.ProblemDAO().addProblem(problem);
+                }
                 entity.Checker checker = new entity.Checker(0, problem != null ? problem.getId() : 1, cleanMarkdown(checkerCodeRaw), "cpp");
                 dal.CheckerDAO checkerDAO = new dal.CheckerDAO();
                 int checkerId = checkerDAO.addChecker(checker);
@@ -197,7 +197,7 @@ public class EvaluationController {
                 for (int i = 0; i < randomCount; i++) modeList.add("random");
 
                 // Tạo thư mục lưu trữ testcase ngay trong dự án
-                File workspaceDir = new File("testcases_data/problem_" + problemId);
+                File workspaceDir = new File("testcases_data/problem_" + problem.getId());
                 if (!workspaceDir.exists()) {
                     workspaceDir.mkdirs();
                 }
@@ -238,6 +238,10 @@ public class EvaluationController {
                     throw new Exception("Biên dịch AC Code thất bại! Exit: " + (pAc.isAlive() ? "TIMEOUT" : pAc.exitValue()) + " Lỗi: " + err);
                 }
 
+                if (problem != null && problem.getId() <= 0) {
+                    new dal.ProblemDAO().addProblem(problem);
+                }
+
                 dal.TestCaseDAO dao = new dal.TestCaseDAO();
                 int successCount = 0;
 
@@ -272,7 +276,7 @@ public class EvaluationController {
 
                     // Insert vào CSDL
                     TestCase tc = new TestCase();
-                    tc.setProblemId(safeProblemId);
+                    tc.setProblemId(problem.getId());
                     tc.setInputData(generatedInput);
                     tc.setExpectedOutput(expectedOutput);
                     tc.setStrengthStatus(currentMode.toUpperCase()); // Ghi rõ: EDGE, MAX, RANDOM
@@ -318,8 +322,6 @@ public class EvaluationController {
     public void runEvaluation(Problem problem, String checkerCode, String acCode, String waCode, EvaluationListener listener) {
         listener.onStart();
 
-        boolean usingReal = !isBlank(checkerCode) || !isBlank(acCode) || !isBlank(waCode);
-
         // Lấy Testcase từ Database theo id của bài tập hiện tại (Problem)
         dal.TestCaseDAO testCaseDAO = new dal.TestCaseDAO();
         int problemId = problem != null ? problem.getId() : 1;
@@ -330,11 +332,11 @@ public class EvaluationController {
             testCases = new ArrayList<>();
         }
 
-        // SampleCode: dùng dữ liệu thực nếu có, ngược lại fallback mock
-        List<SampleCode> sampleCodes = buildSampleCodes(acCode, waCode, usingReal);
+        // SampleCode: dùng dữ liệu thực từ các trường input
+        List<SampleCode> sampleCodes = buildSampleCodes(acCode, waCode);
 
         // Checker: dùng checker code thực nếu có, ngược lại null (so khớp chính xác)
-        Checker checker = buildChecker(checkerCode, usingReal);
+        Checker checker = buildChecker(checkerCode);
 
         EvaluationTask task = new EvaluationTask(
             testCases, sampleCodes, checker, 1500L,
@@ -360,62 +362,24 @@ public class EvaluationController {
     }
 
     /** Trả về Checker thực nếu checkerCode hợp lệ, ngược lại null. */
-    private Checker buildChecker(String checkerCode, boolean usingReal) {
+    private Checker buildChecker(String checkerCode) {
         if (isBlank(checkerCode)) return null;
-        String lang = usingReal ? "cpp" : "java";
-        return new Checker(cleanMarkdown(checkerCode), lang);
+        return new Checker(cleanMarkdown(checkerCode), "cpp");
     }
 
-    /** Xây dựng danh sách SampleCode từ code thực hoặc mock. */
-    private List<SampleCode> buildSampleCodes(String acCode, String waCode, boolean usingReal) {
+    /** Xây dựng danh sách SampleCode từ code thực. */
+    private List<SampleCode> buildSampleCodes(String acCode, String waCode) {
         List<SampleCode> list = new ArrayList<>();
-        String lang = usingReal ? "cpp" : "java";
+        String lang = "cpp";
 
         if (!isBlank(acCode)) {
             list.add(new SampleCode(cleanMarkdown(acCode), lang, "AC"));
-        } else {
-            // Mock AC: nhân 2 đúng
-            list.add(new SampleCode(
-                "import java.util.Scanner;\n" +
-                "public class Main {\n" +
-                "    public static void main(String[] args) {\n" +
-                "        Scanner sc = new Scanner(System.in);\n" +
-                "        if (sc.hasNextInt()) System.out.println(sc.nextInt() * 2);\n" +
-                "    }\n" +
-                "}\n",
-                "java", "AC"));
         }
 
         if (!isBlank(waCode)) {
             list.add(new SampleCode(cleanMarkdown(waCode), lang, "WA"));
-        } else {
-            // Mock WA: nhân 3 sai logic
-            list.add(new SampleCode(
-                "import java.util.Scanner;\n" +
-                "public class Main {\n" +
-                "    public static void main(String[] args) {\n" +
-                "        Scanner sc = new Scanner(System.in);\n" +
-                "        if (sc.hasNextInt()) System.out.println(sc.nextInt() * 3);\n" +
-                "    }\n" +
-                "}\n",
-                "java", "WA"));
-
-            // Mock TLE (chỉ thêm khi dùng toàn mock, không thêm khi có code thực)
-            list.add(new SampleCode(
-                "public class Main {\n" +
-                "    public static void main(String[] args) { while (true) {} }\n" +
-                "}\n",
-                "java", "TLE"));
         }
 
-        return list;
-    }
-
-    /** Mock testcase chuẩn — sẽ mở rộng kết nối DB. */
-    private List<TestCase> buildMockTestCases() {
-        List<TestCase> list = new ArrayList<>();
-        list.add(new TestCase(1, 101, "5\n",  "10", false, "Normal"));
-        list.add(new TestCase(2, 101, "12\n", "24", false, "Normal"));
         return list;
     }
 }

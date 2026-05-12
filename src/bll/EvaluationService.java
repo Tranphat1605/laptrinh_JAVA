@@ -22,6 +22,16 @@ public class EvaluationService {
     public EvaluationReport evaluateTestCases(List<TestCase> testCases, List<SampleCode> sampleCodes, Checker checker, long timeLimitMs) {
         EvaluationReport report = new EvaluationReport();
 
+        String checkerExePath = null;
+        if (checker != null) {
+            ExecutionResult compileResult = sandboxService.compileChecker(checker.getCode());
+            if (!compileResult.getStatus().equals("SUCCESS")) {
+                report.addWarning("Biên dịch Custom Checker thất bại: " + compileResult.getError());
+                return report;
+            }
+            checkerExePath = compileResult.getOutput(); // The output contains the path to the executable
+        }
+
         for (int i = 0; i < sampleCodes.size(); i++) {
             SampleCode sample = sampleCodes.get(i);
             int passedCount = 0;
@@ -46,9 +56,9 @@ public class EvaluationService {
                     ExecutionResult execResult = executor.runCode(tempDir, tc.getInputData(), timeLimitMs);
                     
                     String actualVerdict;
-                    if (checker != null) {
+                    if (checkerExePath != null) {
                         // Nếu bài toán có cung cấp custom checker
-                        actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checker);
+                        actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checkerExePath);
                     } else {
                         // So khớp chính xác mặc định
                         actualVerdict = getVerdict(execResult, tc.getExpectedOutput());
@@ -132,6 +142,15 @@ public class EvaluationService {
                 return new ExecutionResult("CE", "", compileResult.getError(), 0, compileResult.getExitCode());
             }
 
+            String checkerExePath = null;
+            if (checker != null) {
+                ExecutionResult checkerCompileResult = sandboxService.compileChecker(checker.getCode());
+                if (!checkerCompileResult.getStatus().equals("SUCCESS")) {
+                    return new ExecutionResult("CE", "", "Lỗi biên dịch Custom Checker: " + checkerCompileResult.getError(), 0, checkerCompileResult.getExitCode());
+                }
+                checkerExePath = checkerCompileResult.getOutput();
+            }
+
             long maxTime = 0;
             int passedCount = 0;
 
@@ -141,8 +160,8 @@ public class EvaluationService {
                 maxTime = Math.max(maxTime, execResult.getExecutionTime());
                 
                 String actualVerdict;
-                if (checker != null) {
-                    actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checker);
+                if (checkerExePath != null) {
+                    actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checkerExePath);
                 } else {
                     actualVerdict = getVerdict(execResult, tc.getExpectedOutput());
                 }
@@ -193,7 +212,7 @@ public class EvaluationService {
     /**
      * Hàm chấm dùng Custom Checker thay vì so khớp chính xác
      */
-    private String getVerdictByChecker(ExecutionResult execResult, String inputData, String expectedOutput, Checker checker) {
+    private String getVerdictByChecker(ExecutionResult execResult, String inputData, String expectedOutput, String checkerExePath) {
         if (!execResult.getStatus().equals("SUCCESS")) {
             return execResult.getStatus(); // Trả luôn TLE, RTE, CE của code mẫu
         }
@@ -201,7 +220,7 @@ public class EvaluationService {
         String actual = execResult.getOutput();
         
         ExecutionResult checkerResult = sandboxService.executeChecker(
-                checker.getCode(),
+                checkerExePath,
                 inputData,
                 expectedOutput,
                 actual,
