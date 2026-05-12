@@ -1,13 +1,21 @@
 package controller;
 
+import bll.EvaluationService;
 import bll.SandboxService;
+import dal.CheckerDAO;
+import dal.ProblemDAO;
+import dal.TestCaseDAO;
+import entity.Checker;
 import entity.ExecutionResult;
+import entity.Problem;
+import entity.TestCase;
 
 import javax.swing.SwingUtilities;
+import java.util.List;
 
 /**
  * Controller điều phối logic cho StudentFrame.
- * Chứa nội dung đề bài và xử lý nộp code.
+ * Trích xuất đề bài từ CSDL và xử lý nộp code.
  */
 public class StudentController {
 
@@ -17,39 +25,56 @@ public class StudentController {
         void onError(String message);
     }
 
-    private static final String[] DESCRIPTIONS = {
-        "Mô tả:\nNhập vào 2 số nguyên A và B cách nhau bởi khoảng trắng.\nIn ra tổng A + B.\n\n"
-        + "Giới hạn:\n-10^9 <= A, B <= 10^9\n\nVí dụ Input:\n1 2\nVí dụ Output:\n3",
-
-        "Mô tả:\nNhập vào số nguyên dương N. Kiểm tra N có phải là số nguyên tố không.\n"
-        + "In ra YES hoặc NO.\n\nVí dụ Input:\n7\nVí dụ Output:\nYES"
-    };
-
-    private static final String[] MOCK_INPUTS = { "1 2\n", "7\n" };
-
     private final SandboxService sandboxService;
+    private final EvaluationService evaluationService;
+    private final ProblemDAO problemDAO;
+    private final TestCaseDAO testCaseDAO;
+    private final CheckerDAO checkerDAO;
+    private List<Problem> problems;
 
     public StudentController() {
         this.sandboxService = new SandboxService();
+        this.evaluationService = new EvaluationService();
+        this.problemDAO = new ProblemDAO();
+        this.testCaseDAO = new TestCaseDAO();
+        this.checkerDAO = new CheckerDAO();
     }
 
-    /** Trả về mô tả đề bài theo index — đồng bộ, không cần Thread. */
+    /** Lấy danh sách đề bài từ CSDL. */
+    public List<Problem> fetchProblems() {
+        this.problems = problemDAO.getAllProblems();
+        return this.problems;
+    }
+
+    /** Trả về mô tả đề bài theo index của list. */
     public String getDescription(int problemIndex) {
-        if (problemIndex >= 0 && problemIndex < DESCRIPTIONS.length) {
-            return DESCRIPTIONS[problemIndex];
+        if (problems != null && problemIndex >= 0 && problemIndex < problems.size()) {
+            return problems.get(problemIndex).getContent();
         }
-        return "";
+        return "Không có nội dung mô tả cho đề bài này.";
     }
 
-    /** Nộp code và chấm trên sandbox. Callback gọi trên EDT. */
+    /** Nộp code và chấm trên sandbox bằng input mẫu lấy từ DB. Callback gọi trên EDT. */
     public void submitCode(String code, String lang, int problemIndex, SubmitListener listener) {
         SwingUtilities.invokeLater(listener::onStart);
         new Thread(() -> {
             try {
-                String input = (problemIndex >= 0 && problemIndex < MOCK_INPUTS.length)
-                        ? MOCK_INPUTS[problemIndex] : "";
-                ExecutionResult result = sandboxService.executeCode(code, lang, input, 2000L);
-                SwingUtilities.invokeLater(() -> listener.onComplete(result));
+                if (problems != null && problemIndex >= 0 && problemIndex < problems.size()) {
+                    Problem p = problems.get(problemIndex);
+                    List<TestCase> tcs = testCaseDAO.getTestCasesByProblemId(p.getId());
+                    Checker checker = checkerDAO.getCheckerByProblemId(p.getId());
+                    
+                    if (tcs == null || tcs.isEmpty()) {
+                        SwingUtilities.invokeLater(() -> listener.onError("Đề bài không có testcase nào!"));
+                        return;
+                    }
+
+                    // Chấm bài đàng hoàng quét qua toàn bộ testcases
+                    ExecutionResult result = evaluationService.evaluateStudentSubmission(code, lang, tcs, checker, 2000L);
+                    SwingUtilities.invokeLater(() -> listener.onComplete(result));
+                } else {
+                    SwingUtilities.invokeLater(() -> listener.onError("Lỗi: Không tìm thấy đề bài"));
+                }
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> listener.onError(e.getMessage()));
             }

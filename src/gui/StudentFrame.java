@@ -2,8 +2,10 @@ package gui;
 
 import controller.StudentController;
 import entity.ExecutionResult;
+import entity.Problem;
 
 import java.awt.*;
+import java.util.List;
 import javax.swing.*;
 
 /**
@@ -33,14 +35,14 @@ public class StudentFrame extends JFrame {
         controller = new StudentController();
 
         buildUI();
-        loadDescription(); // hiển thị đề đầu tiên
+        loadProblemsAndDescription(); // Lấy dữ liệu từ DB thay vì cứng nhắc
     }
 
     private void buildUI() {
         // ── Top panel ──
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         topPanel.add(new JLabel("Chọn bài tập:"));
-        problemComboBox = new JComboBox<>(new String[]{"Bài 1: A+B Cơ bản", "Bài 2: Số nguyên tố"});
+        problemComboBox = new JComboBox<>();
         topPanel.add(problemComboBox);
 
         topPanel.add(new JLabel("  Ngôn ngữ:"));
@@ -81,15 +83,37 @@ public class StudentFrame extends JFrame {
         add(resultScrollPane, BorderLayout.SOUTH);
 
         // ── Events ──
-        problemComboBox.addActionListener(e -> loadDescription());
+        problemComboBox.addActionListener(e -> {
+            if (problemComboBox.getSelectedIndex() != -1) {
+                loadDescription();
+            }
+        });
         submitButton.addActionListener(e -> handleSubmit());
     }
 
-    /** Cập nhật mô tả đề — lấy từ controller, không có logic ở đây. */
+    /** Lấy đề bài từ CSDL qua controller rồi đổ vào JComboBox. */
+    private void loadProblemsAndDescription() {
+        List<Problem> problems = controller.fetchProblems();
+        problemComboBox.removeAllItems();
+        if (problems != null && !problems.isEmpty()) {
+            for (Problem p : problems) {
+                problemComboBox.addItem(p.getTitle() != null ? p.getTitle() : "Bài " + p.getId());
+            }
+            problemComboBox.setSelectedIndex(0);
+            loadDescription();
+        } else {
+            problemComboBox.addItem("Chưa có đề bài nào.");
+            problemDescriptionArea.setText("Rất tiếc, hiện tại không có đề bài nào trong CSDL.");
+        }
+    }
+
+    /** Cập nhật mô tả đề — lấy từ controller. */
     private void loadDescription() {
         int idx = problemComboBox.getSelectedIndex();
-        problemDescriptionArea.setText(controller.getDescription(idx));
-        problemDescriptionArea.setCaretPosition(0);
+        if (idx >= 0) {
+            problemDescriptionArea.setText(controller.getDescription(idx));
+            problemDescriptionArea.setCaretPosition(0);
+        }
     }
 
     /** Nộp code — uỷ thác hoàn toàn cho controller. */

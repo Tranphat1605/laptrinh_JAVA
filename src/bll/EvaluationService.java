@@ -117,6 +117,57 @@ public class EvaluationService {
     }
 
     /**
+     * Dùng để chấm bài của Học sinh, trả về AC, WA, TLE, CE, v.v.
+     * Chạy code qua từng testcase cho đến khi xong hoặc gặp testcase sai.
+     */
+    public ExecutionResult evaluateStudentSubmission(String code, String language, List<TestCase> testCases, Checker checker, long timeLimitMs) {
+        bll.executor.CodeExecutor executor = bll.executor.CodeExecutorFactory.getExecutor(language);
+        if (executor == null) return new ExecutionResult("CE", "", "Unsupported language: " + language, 0, -1);
+
+        try {
+            java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("student_eval");
+            ExecutionResult compileResult = executor.compile(tempDir, code);
+            
+            if (!compileResult.getStatus().equals("SUCCESS")) {
+                return new ExecutionResult("CE", "", compileResult.getError(), 0, compileResult.getExitCode());
+            }
+
+            long maxTime = 0;
+            int passedCount = 0;
+
+            for (int i = 0; i < testCases.size(); i++) {
+                TestCase tc = testCases.get(i);
+                ExecutionResult execResult = executor.runCode(tempDir, tc.getInputData(), timeLimitMs);
+                maxTime = Math.max(maxTime, execResult.getExecutionTime());
+                
+                String actualVerdict;
+                if (checker != null) {
+                    actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checker);
+                } else {
+                    actualVerdict = getVerdict(execResult, tc.getExpectedOutput());
+                }
+                
+                if (actualVerdict.equals("AC")) {
+                    passedCount++;
+                } else {
+                    // Trả về ngay khi gặp testcase lỗi
+                    String outputStr = "Sai ở Testcase #" + (i + 1) + " (Passed: " + passedCount + "/" + testCases.size() + ")\n\n"
+                            + "Input:\n" + tc.getInputData() + "\n\n"
+                            + "Output của bạn:\n" + execResult.getOutput() + "\n\n"
+                            + "Output mong đợi:\n" + tc.getExpectedOutput();
+                    return new ExecutionResult(actualVerdict, outputStr, execResult.getError(), maxTime, execResult.getExitCode());
+                }
+            }
+
+            // AC ALL
+            return new ExecutionResult("AC", "Đã qua toàn bộ " + testCases.size() + " Testcases!", "", maxTime, 0);
+
+        } catch (Exception e) {
+            return new ExecutionResult("RTE", "", "Lỗi hệ thống khi chấm: " + e.getMessage(), 0, -1);
+        }
+    }
+
+    /**
      * Hàm so khớp Output thực tế và Output chuẩn của Testcase
      */
     private String getVerdict(ExecutionResult execResult, String expectedOutput) {

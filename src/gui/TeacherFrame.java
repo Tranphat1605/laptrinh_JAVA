@@ -9,7 +9,6 @@ import entity.Problem;
 import java.awt.*;
 import java.io.File;
 import javax.swing.*;
-import javax.swing.SwingUtilities;
 
 /**
  * View: chỉ chứa code xây dựng giao diện Swing.
@@ -59,7 +58,8 @@ public class TeacherFrame extends JFrame {
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
-        controller     = new TeacherController("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");
+        // controller     = new TeacherController("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");
+        controller     = new TeacherController("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");
         evalController = new EvaluationController();
 
         // Top: Stepper
@@ -358,6 +358,9 @@ public class TeacherFrame extends JFrame {
         btnRunCpp.addActionListener(e -> {
              String genCode = generatorCodeArea.getText();
              String acCode = (sampleACArea != null) ? sampleACArea.getText() : "";
+             String checkerCode = (checkerCodeArea != null) ? checkerCodeArea.getText() : "";
+             String waCode = (sampleWAArea != null) ? sampleWAArea.getText() : "";
+             
              if (genCode.isEmpty() || genCode.startsWith("//") || genCode.startsWith("Đang")) {
                  JOptionPane.showMessageDialog(this, "⚠ Cần phải có Code Generator (Bước 2) để sinh Testcase.\nVui lòng quay lại Bước 2 bấm 'Yêu cầu AI sinh Testcase & Checker' trước!", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
                  return;
@@ -398,7 +401,7 @@ public class TeacherFrame extends JFrame {
              botP.add(btnClose);
              progressDialog.add(botP, BorderLayout.SOUTH);
 
-             evalController.compileAndGenerateTestcases(genCode, acCode, currentProblem, 20, new EvaluationController.EvaluationListener() {
+             evalController.compileAndGenerateTestcases(genCode, acCode, checkerCode, waCode, currentProblem, 20, new EvaluationController.EvaluationListener() {
                  @Override public void onStart() {
                      SwingUtilities.invokeLater(() -> {
                          updateStatus("🔄 Đang thao tác CSDL...");

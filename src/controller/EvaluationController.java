@@ -177,7 +177,7 @@ public class EvaluationController {
         }, "AutoPipelineThread").start();
     }
 
-    public void compileAndGenerateTestcases(String generatorCode, String acCode, Problem problem, int totalCases, EvaluationListener listener) {
+    public void compileAndGenerateTestcases(String generatorCode, String acCode, String checkerCode, String waCode, Problem problem, int totalCases, EvaluationListener listener) {
         listener.onStart();
         new Thread(() -> {
             try {
@@ -243,6 +243,22 @@ public class EvaluationController {
                         }
                     }
                 }
+
+                // --- MỚI THÊM: LƯU CHECKER VÀ CODE MẪU (AC, WA) VÀO DATABASE ---
+                if (checkerCode != null && !checkerCode.trim().isEmpty() && !checkerCode.startsWith("//")) {
+                    dal.CheckerDAO checkerDao = new dal.CheckerDAO();
+                    entity.Checker checker = new entity.Checker(safeProblemId, cleanMarkdown(checkerCode), "cpp");
+                    checkerDao.addChecker(checker);
+                }
+                
+                dal.SampleCodeDAO sampleDao = new dal.SampleCodeDAO();
+                if (acCode != null && !acCode.trim().isEmpty() && !acCode.startsWith("Đang")) {
+                    sampleDao.addSampleCode(new entity.SampleCode(safeProblemId, cleanMarkdown(acCode), "cpp", "AC"));
+                }
+                if (waCode != null && !waCode.trim().isEmpty() && !waCode.startsWith("Đang")) {
+                    sampleDao.addSampleCode(new entity.SampleCode(safeProblemId, cleanMarkdown(waCode), "cpp", "WA"));
+                }
+                // -------------------------------------------------------------
 
                 dal.TestCaseDAO dao = new dal.TestCaseDAO();
                 int successCount = 0;

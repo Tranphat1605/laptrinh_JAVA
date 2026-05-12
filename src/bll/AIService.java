@@ -29,13 +29,15 @@ public class AIService {
 
     // Groq API endpoint (OpenAI-compatible)
     private static final String GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+    // private static final String GROQ_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
     private static final int MAX_RETRIES = 3;
 
     // Model text-only: nhanh, mạnh, miễn phí
     private static final String TEXT_MODEL = "llama-3.3-70b-versatile";
+    // private static final String TEXT_MODEL = "gemini-1.5-pro-latest";
     // Model vision: hỗ trợ phân tích ảnh
     private static final String VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
-
+    // private static final String VISION_MODEL = "gemini-1.5-pro-latest";
     public AIService(String apiKey) {
         this.apiKey = apiKey;
         this.client = HttpClient.newBuilder()
@@ -177,10 +179,17 @@ public class AIService {
             try {
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                 int status = response.statusCode();
-                JsonObject jsonResponse = gson.fromJson(response.body(), JsonObject.class);
+                
+                com.google.gson.JsonElement parsedElement = com.google.gson.JsonParser.parseString(response.body());
+                JsonObject jsonResponse = null;
+                if (parsedElement.isJsonArray() && parsedElement.getAsJsonArray().size() > 0) {
+                    jsonResponse = parsedElement.getAsJsonArray().get(0).getAsJsonObject();
+                } else if (parsedElement.isJsonObject()) {
+                    jsonResponse = parsedElement.getAsJsonObject();
+                }
 
                 if (status == 200) {
-                    if (jsonResponse.has("choices")) {
+                    if (jsonResponse != null && jsonResponse.has("choices")) {
                         JsonArray choices = jsonResponse.getAsJsonArray("choices");
                         if (choices.size() > 0) {
                             JsonObject message = choices.get(0).getAsJsonObject()
