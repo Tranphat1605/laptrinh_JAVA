@@ -95,14 +95,16 @@ public class AIService {
                 "=== YÊU CẦU ===\n" +
                 "Viết code C++ generator sử dụng testlib.h để tự động sinh dữ liệu input cho bài toán trên.\n" +
                 "Bắt buộc:\n" +
-                "1. Dòng đầu tiên trong main: registerGen(argc, argv, 1);\n" +
-                "2. Hỗ trợ seed từ argv[1].\n" +
-                "3. In ra đúng định dạng Input mà đề bài yêu cầu, không in text thừa.\n" +
-                "4. CHÚ Ý QUAN TRỌNG VỀ ĐỘ MẠNH (STRONG TESTCASES):\n" +
+                "1. BẮT BUỘC #include <bits/stdc++.h> hoặc đầy đủ các thư viện C++ cần thiết (<iostream>, <cmath>, <vector>, v.v.) trước khi #include \"testlib.h\" để không bị lỗi Missing Declaration khi biên dịch.\n" +
+                "2. Dòng đầu tiên trong main: registerGen(argc, argv, 1);\n" +
+                "3. Hỗ trợ seed từ argv[1].\n" +
+                "4. In ra đúng định dạng Input mà đề bài yêu cầu, không in text thừa.\n" +
+                "5. CHÚ Ý QUAN TRỌNG VỀ ĐỘ MẠNH (STRONG TESTCASES):\n" +
                 "   - Generator cần lấy arg từ argv[2] (nếu truyền vào) làm tham số để quyết định mode sinh testcase.\n" +
                 "   - Nếu mode là 'edge': hãy sinh các trường hợp biên, giá trị tối thiểu, tối đa (VD: N=0, N=1, mảng rỗng, mảng gồm các phần tử bằng nhau hoặc âm hoàn toàn).\n" +
                 "   - Nếu mode là 'max': phải sinh Input sao cho N hoặc giá trị đạt sát Tối Đa của ràng buộc đề bài (áp lực cao để tạo TLE/MLE).\n" +
                 "   - Nếu mode là 'random' hoặc không có mode, sinh Random ngẫu nhiên.\n" +
+                "   - TUYỆT ĐỐI KHÔNG sử dụng hàm quit() với 1 tham số (vd: quit(\"lỗi\")). Nếu cần báo lỗi hãy dùng quitf(_fail, \"Lỗi...\");\n" +
                 "\nChỉ trả về code C++, không markdown.";
         String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
         return sendRequestWithRetry(payload);
@@ -118,10 +120,13 @@ public class AIService {
                 "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
                 "=== YÊU CẦU ===\n" +
                 "Viết code C++ checker sử dụng testlib.h cho bài toán trên.\n" +
-                "- Đọc input từ: inf\n" +
-                "- Đọc đáp án chuẩn từ: ans\n" +
-                "- Đọc output của thí sinh từ: ouf\n" +
-                "- Gọi quitf(_ok, ...) hoặc quitf(_wa, ...) tùy thuộc kết quả.\n" +
+                "- BẮT BUỘC #include <bits/stdc++.h> hoặc đầy đủ các thư viện C++ cần thiết (<iostream>, <cmath>, <vector>, v.v.) trước khi #include \"testlib.h\" để không bị lỗi Missing Declaration khi biên dịch.\n" +
+                "- Dòng đầu tiên trong main BẮT BUỘC phải là: registerTestlibCmd(argc, argv);\n" +
+                "- BẮT BUỘC sử dụng: inf.read... để đọc input.\n" +
+                "- BẮT BUỘC sử dụng: ans.read... để đọc đáp án chuẩn.\n" +
+                "- BẮT BUỘC sử dụng: ouf.read... để đọc output của thí sinh.\n" +
+                "- TUYỆT ĐỐI KHÔNG SỬ DỤNG std::cin hay std::cout hay scanf/printf.\n" +
+                "- Gọi quitf(_ok, ...) nếu đúng, hoặc quitf(_wa, ...) nếu sai.\n" +
                 "Chỉ trả về code C++, không markdown.";
         String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
         return sendRequestWithRetry(payload);
@@ -148,6 +153,7 @@ public class AIService {
                 "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
                 "=== YÊU CẦU ĐỐI VỚI LOẠI CODE " + type + " ===\n" +
                 constraintInstructions + 
+                "- BẮT BUỘC #include đầy đủ các thư viện C++ cần thiết (như <iostream>, <cmath>, <vector>, <algorithm>, v.v.) hoặc dùng <bits/stdc++.h> để không bị lỗi Missing Declaration khi biên dịch.\n" +
                 "\nChỉ trả về mã C++ thuần túy, không format markdown, không giải thích dòng nào cả.";
 
         String payload = buildTextPayload(TEXT_MODEL, prompt);

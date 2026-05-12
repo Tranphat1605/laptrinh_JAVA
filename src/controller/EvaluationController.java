@@ -177,7 +177,7 @@ public class EvaluationController {
         }, "AutoPipelineThread").start();
     }
 
-    public void compileAndGenerateTestcases(String generatorCode, String acCode, int problemId, int totalCases, EvaluationListener listener) {
+    public void compileAndGenerateTestcases(String generatorCode, String acCode, Problem problem, int totalCases, EvaluationListener listener) {
         listener.onStart();
         new Thread(() -> {
             try {
@@ -220,6 +220,30 @@ public class EvaluationController {
                     throw new Exception("Biên dịch AC Code thất bại! Lỗi: " + new String(pAc.getErrorStream().readAllBytes()));
                 }
 
+                // Bảo đảm có tham chiếu Problem hợp lệ trong DB để không bị lỗi Khóa Ngoại (Foreign Key)
+                dal.ProblemDAO problemDao = new dal.ProblemDAO();
+                java.util.List<entity.Problem> probs = problemDao.getAllProblems();
+                int safeProblemId = problem != null ? problem.getId() : 1;
+                
+                // Nếu chưa có, ta tự sinh Problem từ dữ liệu AI đã phân tích được
+                if (probs.isEmpty() || safeProblemId == 0) {
+                    entity.Problem dbProblem = new entity.Problem(0, 
+                        problem != null && problem.getTitle() != null ? problem.getTitle() : "Bài tập chưa phân loại (Auto Gen)", 
+                        problem != null && problem.getContent() != null ? problem.getContent() : "Được tạo tự động bởi Hệ thống AI", 
+                        problem != null ? problem.getTimeLimitMs() : 2000, 
+                        problem != null ? problem.getMemoryLimitMb() : 256, 
+                        "AI Sandbox"
+                    );
+                    problemDao.addProblem(dbProblem);
+                    probs = problemDao.getAllProblems();
+                    if (!probs.isEmpty()) {
+                        safeProblemId = probs.get(probs.size() - 1).getId();
+                        if (problem != null) {
+                            problem.setId(safeProblemId); // Cập nhật lại ID cho Frontend sử dụng khi lấy List<TestCase>
+                        }
+                    }
+                }
+
                 dal.TestCaseDAO dao = new dal.TestCaseDAO();
                 int successCount = 0;
 
@@ -228,26 +252,37 @@ public class EvaluationController {
                     String seed = String.valueOf(System.currentTimeMillis() + i);
                     listener.onProgress(i, totalCases, "Đang sinh Testcase " + (i + 1) + "/" + totalCases + " (Mode: " + currentMode + ")");
                     
+                    // 1. Chạy Generator (Ghi thẳng ra file để chống lag/deadlock buffer)
+                    File genOutFile = new File(tempDir.toFile(), "gen_out.txt");
                     ProcessBuilder pbRunGen = new ProcessBuilder(genExe.getAbsolutePath(), seed, currentMode);
+                    pbRunGen.redirectOutput(genOutFile);
                     Process runGen = pbRunGen.start();
-                    String generatedInput = new String(runGen.getInputStream().readAllBytes());
-                    runGen.waitFor(5, TimeUnit.SECONDS);
-
-                    ProcessBuilder pbRunAc = new ProcessBuilder(acExe.getAbsolutePath());
-                    Process runAc = pbRunAc.start();
-                    runAc.getOutputStream().write(generatedInput.getBytes());
-                    runAc.getOutputStream().flush();
-                    runAc.getOutputStream().close();
                     
-                    String expectedOutput = new String(runAc.getInputStream().readAllBytes());
-                    runAc.waitFor(5, TimeUnit.SECONDS);
+                    if (!runGen.waitFor(2, TimeUnit.SECONDS)) {  // Fast-fail sau 2s
+                        runGen.destroyForcibly();
+                        throw new Exception("Code Generator (Bước 2) bị treo hoặc chạy quá 2s! Vui lòng tự SỬA BẰNG TAY mã C++ trên màn hình thay vì gọi AI để đỡ tốn Quota.");
+                    }
+                    String generatedInput = Files.readString(genOutFile.toPath());
+
+                    // 2. Chạy AC Code để ra Output chuẩn
+                    File acOutFile = new File(tempDir.toFile(), "ac_out.txt");
+                    ProcessBuilder pbRunAc = new ProcessBuilder(acExe.getAbsolutePath());
+                    pbRunAc.redirectInput(genOutFile); // Đọc input trực tiếp từ file gen
+                    pbRunAc.redirectOutput(acOutFile); // Ghi output thẳng ra file
+                    Process runAc = pbRunAc.start();
+                    
+                    if (!runAc.waitFor(2, TimeUnit.SECONDS)) { // Fast-fail sau 2s
+                        runAc.destroyForcibly();
+                        throw new Exception("Code Mẫu AC (Bước 3) chạy quá giới hạn 2 giây (TLE)! Tự SỬA LẠI TAY thuật toán cho tối ưu hơn trên giao diện nhé.");
+                    }
+                    String expectedOutput = Files.readString(acOutFile.toPath());
 
                     // Insert vào CSDL
                     TestCase tc = new TestCase();
-                    tc.setProblemId(problemId);
+                    tc.setProblemId(safeProblemId);
                     tc.setInputData(generatedInput);
                     tc.setExpectedOutput(expectedOutput);
-                    tc.setStrengthStatus("Normal");
+                    tc.setStrengthStatus(currentMode.toUpperCase()); // Ghi rõ: EDGE, MAX, RANDOM
                     if(dao.addTestCase(tc)) {
                         successCount++;
                     }
@@ -288,21 +323,20 @@ public class EvaluationController {
      * onStart() gọi đồng bộ trên luồng hiện tại (EDT).
      * Các callback còn lại gọi từ background thread — View tự bọc SwingUtilities nếu cần.
      */
-    public void runEvaluation(String checkerCode, String acCode, String waCode, EvaluationListener listener) {
+    public void runEvaluation(Problem problem, String checkerCode, String acCode, String waCode, EvaluationListener listener) {
         listener.onStart();
 
         boolean usingReal = !isBlank(checkerCode) || !isBlank(acCode) || !isBlank(waCode);
 
-        // Lấy Testcase từ Database thật thay vì dùng hàm Mock
+        // Lấy Testcase từ Database theo id của bài tập hiện tại (Problem)
         dal.TestCaseDAO testCaseDAO = new dal.TestCaseDAO();
-        // Giả sử lấy Testcase của problemId = 1 (Bạn có thể truyền param problemId từ UI xuống sau này)
-        List<TestCase> testCases = testCaseDAO.getTestCasesByProblemId(1); 
-        
-        // Nếu DB chưa có dữ liệu, fallback về Mock để hệ thống không bị lỗi crash màn hình
-        // if (testCases == null || testCases.isEmpty()) {
-        //     System.out.println("CẢNH BÁO: Database không có Testcase nào cho Problem ID 1. Fallback về Mock TestCases.");
-        //     testCases = buildMockTestCases();
-        // }
+        int problemId = problem != null ? problem.getId() : 1;
+        List<TestCase> testCases = testCaseDAO.getTestCasesByProblemId(problemId);
+
+        // Đảm bảo testCases không null
+        if (testCases == null) {
+            testCases = new ArrayList<>();
+        }
 
         // SampleCode: dùng dữ liệu thực nếu có, ngược lại fallback mock
         List<SampleCode> sampleCodes = buildSampleCodes(acCode, waCode, usingReal);

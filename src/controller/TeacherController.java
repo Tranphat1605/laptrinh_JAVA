@@ -50,13 +50,12 @@ public class TeacherController {
     }
 
     /** Sinh Generator C++ và Checker C++. */
-    public void generateTestcaseAndChecker(String problemText, GenerationListener listener) {
+    public void generateTestcaseAndChecker(Problem problem, GenerationListener listener) {
         SwingUtilities.invokeLater(listener::onStart);
         new Thread(() -> {
             try {
-                Problem mock = new Problem(1, "Mock", problemText, 1000, 256, "Mock");
-                String gen   = aiService.generateGeneratorCode(mock);
-                String check = aiService.generateChecker(mock);
+                String gen   = aiService.generateGeneratorCode(problem);
+                String check = aiService.generateChecker(problem);
                 SwingUtilities.invokeLater(() -> listener.onComplete(gen, check));
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> listener.onError(e.getMessage()));
@@ -65,13 +64,12 @@ public class TeacherController {
     }
 
     /** Sinh code mẫu AC và WA. */
-    public void generateSampleCodes(String problemText, SampleCodeListener listener) {
+    public void generateSampleCodes(Problem problem, SampleCodeListener listener) {
         SwingUtilities.invokeLater(listener::onStart);
         new Thread(() -> {
             try {
-                Problem mock = new Problem(1, "Mock", problemText, 1000, 256, "Mock");
-                String ac = aiService.generateSampleCode(mock, "AC");
-                String wa = aiService.generateSampleCode(mock, "WA");
+                String ac = aiService.generateSampleCode(problem, "AC");
+                String wa = aiService.generateSampleCode(problem, "WA");
                 SwingUtilities.invokeLater(() -> listener.onComplete(ac, wa));
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> listener.onError(e.getMessage()));
