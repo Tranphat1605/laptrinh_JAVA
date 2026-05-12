@@ -129,6 +129,7 @@ public class AIService {
                 "- BẮT BUỘC sử dụng: inf.read... để đọc input.\n" +
                 "- BẮT BUỘC sử dụng: ans.read... để đọc đáp án chuẩn.\n" +
                 "- BẮT BUỘC sử dụng: ouf.read... để đọc output của thí sinh.\n" +
+                "- CHÚ Ý CÚ PHÁP TESTLIB.H: Hàm đọc trả về trực tiếp giá trị (VD: `long long a = ans.readLong();` hoặc `int b = ouf.readInt();`). TUYỆT ĐỐI KHÔNG truyền tham chiếu vào hàm (như `ans.readLong(a)` - Cú pháp này sai và sẽ gây lỗi biên dịch).\n" +
                 "- TUYỆT ĐỐI KHÔNG SỬ DỤNG std::cin hay std::cout hay scanf/printf.\n" +
                 "- Gọi quitf(_ok, ...) nếu đúng, hoặc quitf(_wa, ...) nếu sai.\n" +
                 "Chỉ trả về code C++, không markdown.";
@@ -144,12 +145,19 @@ public class AIService {
         if (type.equals("AC")) {
             constraintInstructions = "- Là code C++ giải chuẩn xác nhất, độ phức tạp thời gian cực kỳ tối ưu, qua được toàn bộ các trường hợp Edge Cases và Input cực lớn.\n";
         } else if (type.equals("WA")) {
-            constraintInstructions = "- Cố tình viết SAI LOGIC ở các TRƯỜNG HỢP BIÊN (Edge cases) nhưng vẫn chạy đúng ở các testcase cơ bản.\n" +
-                                     "- Ví dụ: Không xét trường hợp n=0, hoặc kiểu dữ liệu Int bị tràn số thay vì dùng Long Long, hoặc sai dấu tại điểm giao cắt.\n" +
-                                     "- Không bị TLE, chỉ được in kết quả sai.\n";
+            constraintInstructions = "- MỤC TIÊU TỐI THƯỢNG: ĐÂY LÀ CODE DÙNG ĐỂ BẪY LỖI, NÊN PHẢI BỊ WRONG ANSWER (SAI KẾT QUẢ) TRÊN ÍT NHẤT 1 TESTCASE, TUYỆT ĐỐI KHÔNG ĐƯỢC VIẾT CODE ĐÚNG HOÀN TOÀN (100% AC)!!!\n" +
+                                     "- Cố tình chèn vào một lỗi Logic tế nhị (Subtle logic bug) hoặc bỏ sót Trường hợp biên (Edge cases).\n" +
+                                     "- Ví dụ bắt buộc áp dụng 1 trong các lỗi sau: \n" +
+                                     "  + Dùng kiểu `int` cho biến cộng dồn thay vì `long long` để cố tình gây tràn số khi Input lớn.\n" +
+                                     "  + Bỏ qua trường hợp n=0, n=1, mảng rỗng.\n" +
+                                     "  + Thuật toán Tham lam (Greedy) sai bản chất thay vì Quy hoạch động.\n" +
+                                     "  + Khởi tạo min/max sai giá trị vô cực.\n" +
+                                     "- Lưu ý: Phải biên dịch được, không bị lỗi cú pháp, chạy đúng ở testcase nhỏ, chỉ sai ở testcase dị/lớn.\n";
         } else if (type.equals("TLE")) {
-            constraintInstructions = "- Cố tình viết thuật toán VÉT CẠN (Brute-force) có độ phức tạp cao (O(N^2) hoặc O(N^3)) để bị Quá thời gian (Time Limit Exceeded) khi Input lớn.\n" +
-                                     "- Tuyệt đối KHÔNG LẶP VÔ HẠN bằng while(true), code vẫn phải cho ra kết quả đúng nếu chạy đủ lâu.\n";
+            constraintInstructions = "- MỤC TIÊU TỐI THƯỢNG: ĐÂY LÀ CODE ĐỂ KIỂM TRA GIỚI HẠN THỜI GIAN, PHẢI CHẠY CHẬM VÀ BỊ TLE KHI INPUT LỚN (N=10^5).\n" +
+                                     "- Cố tình sử dụng thuật toán VÉT CẠN (Brute-force) vô cùng chậm chạp có độ phức tạp thời gian cực kém như O(N^2), O(N^3), hoặc đệ quy không nhớ (Backtracking) thay vì Quy hoạch động/Tìm kiếm nhị phân.\n" +
+                                     "- Ví dụ: Thay vì Binary Search, hãy duyệt mảng từ 1 đến N. Thay vì dùng `std::set`, hãy dùng mảng và duyệt tuyến tính để kiểm tra tồn tại.\n" +
+                                     "- TUYỆT ĐỐI KHÔNG dùng vòng lặp vô hạn (infinite loop) `while(true)`, code vẫn phải có logic đúng và kết thúc được, chỉ là tốn nhiều phép tính hơn.\n";
         }
 
         String prompt = "Bạn là một thí sinh tham gia kỳ thi lập trình. \n" +
@@ -247,9 +255,7 @@ public class AIService {
         text = text.replaceAll("(?s)```[a-zA-Z]*\\n", "").replaceAll("```", "");
         // Xóa header markdown (### Bài A:  →  Bài A:) nhưng chừa lại dấu # của #include
         text = text.replaceAll("(?m)^#{1,6}\\s+(?!include)", "");
-        // Xóa bold/italic markdown (**text**, *text*, __text__) (Nhưng bảo vệ các dấu underscore trong C++ như std::mt19937_64)
-        text = text.replaceAll("(?<![a-zA-Z0-9])\\*{1,2}([^*]+)\\*{1,2}(?![a-zA-Z0-9])", "$1");
-        text = text.replaceAll("(?<![a-zA-Z0-9])_{1,2}([^_]+)_{1,2}(?![a-zA-Z0-9])", "$1");
+        // TUYỆT ĐỐI KHÔNG XÓA DẤU * HAY _ VÌ NÓ SẼ LÀM HỎNG PHÉP NHÂN (a * b) HOẶC CON TRỎ TRONG C++
         return text.trim();
     }
 

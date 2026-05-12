@@ -26,6 +26,20 @@ public class TestCaseDAO {
         }
     }
 
+    public boolean deleteTestCasesByProblemId(int problemId) {
+        String sql = "DELETE FROM TestCase WHERE problemId = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, problemId);
+            pstmt.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     public boolean updateTestCaseStrength(int testCaseId, String newStrength) {
         String sql = "UPDATE TestCase SET strengthStatus = ? WHERE id = ?";
         try (Connection conn = DBConnection.getConnection();

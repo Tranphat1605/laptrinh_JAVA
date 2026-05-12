@@ -25,6 +25,7 @@ public class TeacherFrame extends JFrame {
     private JTextArea checkerCodeArea;
     private JTextArea sampleACArea;
     private JTextArea sampleWAArea;
+    private JTextArea sampleTLEArea;
 
     private File selectedImageFile = null;
 
@@ -59,7 +60,7 @@ public class TeacherFrame extends JFrame {
         setLayout(new BorderLayout());
 
         // API key chỉ cần đặt ở 1 chỗ này
-        controller     = new TeacherController("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");
+        controller     = new TeacherController("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");
         evalController = new EvaluationController();
 
         // Top: Stepper
@@ -325,9 +326,13 @@ public class TeacherFrame extends JFrame {
         sampleWAArea = new JTextArea();
         sampleWAArea.setBorder(BorderFactory.createTitledBorder("Mã Mẫu WA (Code sai cố ý để bẫy Testcase)"));
 
-        JPanel codePanel = new JPanel(new GridLayout(1, 2, 10, 10));
+        sampleTLEArea = new JTextArea();
+        sampleTLEArea.setBorder(BorderFactory.createTitledBorder("Mã Mẫu TLE (Code vét cạn/chạy quá thời gian)"));
+
+        JPanel codePanel = new JPanel(new GridLayout(1, 3, 10, 10));
         codePanel.add(new JScrollPane(sampleACArea));
         codePanel.add(new JScrollPane(sampleWAArea));
+        codePanel.add(new JScrollPane(sampleTLEArea));
 
         JButton btnGen = new JButton("Yêu cầu AI tự động sinh Code mẫu Tốt / Xấu");
         btnGen.addActionListener(e -> {
@@ -340,14 +345,17 @@ public class TeacherFrame extends JFrame {
                     @Override public void onStart() {
                         sampleACArea.setText("⏳ Đang gọi AI sinh code tối ưu nhất (AC)...");
                         sampleWAArea.setText("⏳ Đang tìm lỗi sai logic để tạo mã WA...");
+                        sampleTLEArea.setText("⏳ Đang viết code độ phức tạp cao gây TLE...");
                     }
-                    @Override public void onComplete(String ac, String wa) {
+                    @Override public void onComplete(String ac, String wa, String tle) {
                         sampleACArea.setText(ac);
                         sampleWAArea.setText(wa);
+                        sampleTLEArea.setText(tle);
                     }
                     @Override public void onError(String msg) {
                         sampleACArea.setText("❌ Lỗi: " + msg);
                         sampleWAArea.setText("");
+                        sampleTLEArea.setText("");
                     }
                 });
         });
@@ -360,6 +368,7 @@ public class TeacherFrame extends JFrame {
              String acCode = (sampleACArea != null) ? sampleACArea.getText() : "";
              String checkerCode = (checkerCodeArea != null) ? checkerCodeArea.getText() : "";
              String waCode = (sampleWAArea != null) ? sampleWAArea.getText() : "";
+             String tleCode = (sampleTLEArea != null) ? sampleTLEArea.getText() : "";
              
              if (genCode.isEmpty() || genCode.startsWith("//") || genCode.startsWith("Đang")) {
                  JOptionPane.showMessageDialog(this, "⚠ Cần phải có Code Generator (Bước 2) để sinh Testcase.\nVui lòng quay lại Bước 2 bấm 'Yêu cầu AI sinh Testcase & Checker' trước!", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
@@ -401,7 +410,7 @@ public class TeacherFrame extends JFrame {
              botP.add(btnClose);
              progressDialog.add(botP, BorderLayout.SOUTH);
 
-             evalController.compileAndGenerateTestcases(genCode, acCode, checkerCode, waCode, currentProblem, 20, new EvaluationController.EvaluationListener() {
+             evalController.compileAndGenerateTestcases(genCode, acCode, checkerCode, currentProblem, 20, new EvaluationController.EvaluationListener() {
                  @Override public void onStart() {
                      SwingUtilities.invokeLater(() -> {
                          updateStatus("🔄 Đang thao tác CSDL...");
@@ -525,18 +534,20 @@ public class TeacherFrame extends JFrame {
     }
 
     private void runEvaluation() {
-        // Lấy code thực từ Tab 2 (Checker) và Tab 3 (AC, WA)
+        // Lấy code thực từ Tab 2 (Checker) và Tab 3 (AC, WA, TLE)
         String checkerCode = (checkerCodeArea != null) ? checkerCodeArea.getText().trim() : "";
         String acCode      = (sampleACArea   != null) ? sampleACArea.getText().trim()   : "";
         String waCode      = (sampleWAArea   != null) ? sampleWAArea.getText().trim()   : "";
+        String tleCode     = (sampleTLEArea  != null) ? sampleTLEArea.getText().trim()  : "";
 
         // Bỏ qua nếu còn là placeholder mặc định (chưa sinh)
         if (checkerCode.startsWith("// Đang")) checkerCode = "";
         if (acCode.startsWith("Đang gọi"))    acCode      = "";
         if (waCode.startsWith("Đang tìm"))    waCode      = "";
+        if (tleCode.startsWith("Đang viết"))  tleCode     = "";
 
         // Cập nhật nhãn chế độ
-        boolean usingReal = !acCode.isEmpty() || !waCode.isEmpty();
+        boolean usingReal = !acCode.isEmpty() || !waCode.isEmpty() || !tleCode.isEmpty();
         if (!usingReal) {
             JOptionPane.showMessageDialog(this, "⚠ Không tìm thấy mã nguồn!\nVui lòng quay lại Bước 2 và 3 để sinh Checker và Code mẫu trước khi khởi chạy kiểm thử.", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
             return;
@@ -545,7 +556,7 @@ public class TeacherFrame extends JFrame {
         lblEvalMode.setText("✅ Chế độ: Dữ liệu thực từ Bước 2 & 3");
         lblEvalMode.setForeground(new Color(0, 120, 0));
 
-        final String fc = checkerCode, fa = acCode, fw = waCode;
+        final String fc = checkerCode, fa = acCode, fw = waCode, ft = tleCode;
         
         // --- TẠO DIALOG HIỂN THỊ TIẾN TRÌNH KIỂM THỬ ---
         JDialog progressDialog = new JDialog(TeacherFrame.this, "Đang Kiểm thử & Đánh giá Testcase", true);
@@ -567,7 +578,7 @@ public class TeacherFrame extends JFrame {
         
         JPanel topP = new JPanel(new BorderLayout(5, 5));
         topP.setBorder(BorderFactory.createEmptyBorder(10, 10, 5, 10));
-        topP.add(new JLabel("Hệ thống đang chạy các Code mẫu (AC, WA) qua từng Testcase để đánh giá chất lượng..."), BorderLayout.NORTH);
+        topP.add(new JLabel("Hệ thống đang chạy các Code mẫu (AC, WA, TLE) qua từng Testcase để đánh giá chất lượng..."), BorderLayout.NORTH);
         topP.add(pb, BorderLayout.CENTER);
         
         progressDialog.add(topP, BorderLayout.NORTH);
@@ -578,15 +589,15 @@ public class TeacherFrame extends JFrame {
         botP.add(btnClose);
         progressDialog.add(botP, BorderLayout.SOUTH);
 
-        evalController.runEvaluation(currentProblem, fc, fa, fw, new EvaluationController.EvaluationListener() {
+        evalController.runEvaluation(currentProblem, fc, fa, fw, ft, new EvaluationController.EvaluationListener() {
             @Override public void onStart() {
                 btnRunEval.setEnabled(false);
                 evalProgressBar.setValue(0);
                 evalProgressBar.setString("Đang khởi động...");
-                evalLogArea.setText("=== KHỞI CHẠY KIỂM THỬ ===\nSử dụng code thực từ Bước 2 (Checker) & Bước 3 (AC/WA)...\n\n");
+                evalLogArea.setText("=== KHỞI CHẠY KIỂM THỬ ===\nSử dụng code thực từ Bước 2 (Checker) & Bước 3 (AC/WA/TLE)...\n\n");
                 SwingUtilities.invokeLater(() -> {
                     updateStatus("🔄 Đang khởi động Sandbox...");
-                    logArea.append("=== BẮT ĐẦU CHẠY SANDBOX ===\nSử dụng code thực từ Bước 2 (Checker) & Bước 3 (AC/WA)...\n");
+                    logArea.append("=== BẮT ĐẦU CHẠY SANDBOX ===\nSử dụng code thực từ Bước 2 (Checker) & Bước 3 (AC/WA/TLE)...\n");
                 });
             }
             @Override public void onProgress(int cur, int tot, String status) {

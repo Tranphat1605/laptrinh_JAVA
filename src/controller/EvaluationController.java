@@ -114,6 +114,9 @@ public class EvaluationController {
                 dal.TestCaseDAO tcDAO = new dal.TestCaseDAO();
                 int problemId = problem != null ? problem.getId() : 1;
                 
+                // Xóa testcase cũ của bài này trước khi sinh mới để tránh dồn ứ DB
+                tcDAO.deleteTestCasesByProblemId(problemId);
+                
                 for (int i = 0; i < totalCases; i++) {
                     String currentMode = modeList.get(i);
                     String seed = String.valueOf(System.currentTimeMillis() + i);
@@ -183,7 +186,7 @@ public class EvaluationController {
         }, "AutoPipelineThread").start();
     }
 
-    public void compileAndGenerateTestcases(String generatorCode, String acCode, String checkerCode, String waCode, Problem problem, int totalCases, EvaluationListener listener) {
+    public void compileAndGenerateTestcases(String generatorCode, String acCode, String checkerCode, Problem problem, int totalCases, EvaluationListener listener) {
         listener.onStart();
         new Thread(() -> {
             try {
@@ -243,6 +246,12 @@ public class EvaluationController {
                 }
 
                 dal.TestCaseDAO dao = new dal.TestCaseDAO();
+                
+                // Xóa testcase cũ của bài này trước khi sinh mới để tránh dồn ứ DB
+                if (problem != null && problem.getId() > 0) {
+                    dao.deleteTestCasesByProblemId(problem.getId());
+                }
+
                 int successCount = 0;
 
                 for (int i = 0; i < totalCases; i++) {
@@ -319,7 +328,7 @@ public class EvaluationController {
      * onStart() gọi đồng bộ trên luồng hiện tại (EDT).
      * Các callback còn lại gọi từ background thread — View tự bọc SwingUtilities nếu cần.
      */
-    public void runEvaluation(Problem problem, String checkerCode, String acCode, String waCode, EvaluationListener listener) {
+    public void runEvaluation(Problem problem, String checkerCode, String acCode, String waCode, String tleCode, EvaluationListener listener) {
         listener.onStart();
 
         // Lấy Testcase từ Database theo id của bài tập hiện tại (Problem)
@@ -333,7 +342,7 @@ public class EvaluationController {
         }
 
         // SampleCode: dùng dữ liệu thực từ các trường input
-        List<SampleCode> sampleCodes = buildSampleCodes(acCode, waCode);
+        List<SampleCode> sampleCodes = buildSampleCodes(acCode, waCode, tleCode);
 
         // Checker: dùng checker code thực nếu có, ngược lại null (so khớp chính xác)
         Checker checker = buildChecker(checkerCode);
@@ -368,7 +377,7 @@ public class EvaluationController {
     }
 
     /** Xây dựng danh sách SampleCode từ code thực. */
-    private List<SampleCode> buildSampleCodes(String acCode, String waCode) {
+    private List<SampleCode> buildSampleCodes(String acCode, String waCode, String tleCode) {
         List<SampleCode> list = new ArrayList<>();
         String lang = "cpp";
 
@@ -378,6 +387,10 @@ public class EvaluationController {
 
         if (!isBlank(waCode)) {
             list.add(new SampleCode(cleanMarkdown(waCode), lang, "WA"));
+        }
+
+        if (!isBlank(tleCode)) {
+            list.add(new SampleCode(cleanMarkdown(tleCode), lang, "TLE"));
         }
 
         return list;

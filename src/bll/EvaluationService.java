@@ -51,39 +51,55 @@ public class EvaluationService {
                     continue;
                 }
 
-                for (TestCase tc : testCases) {
-                    // Chạy code mẫu qua từng testcase
-                    ExecutionResult execResult = executor.runCode(tempDir, tc.getInputData(), timeLimitMs);
-                    
-                    String actualVerdict;
-                    if (checkerExePath != null) {
-                        // Nếu bài toán có cung cấp custom checker
-                        actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checkerExePath);
-                    } else {
-                        // So khớp chính xác mặc định
-                        actualVerdict = getVerdict(execResult, tc.getExpectedOutput());
-                    }
-                    
-                    if (actualVerdict.equals("AC")) {
-                        passedCount++;
-                    } else if (actualVerdict.equals("TLE")) {
-                        hasTLE = true;
-                    }
+                java.util.concurrent.atomic.AtomicInteger atomicPassedCount = new java.util.concurrent.atomic.AtomicInteger();
+                java.util.concurrent.atomic.AtomicBoolean atomicHasTLE = new java.util.concurrent.atomic.AtomicBoolean();
+                final int currentSampleIndex = i;
+                final String finalCheckerExePath = checkerExePath;
 
-                    // Cập nhật độ mạnh của Test Case 
-                    // Testcase nào bắt được code cố tình sai (WA) hoặc code chậm (TLE) sẽ được đánh giá là Testcase chất lượng (Strong)
-                    if (expected.equals("WA") && actualVerdict.equals("WA")) {
-                        tc.setStrengthStatus("Strong");
-                    } else if (expected.equals("TLE") && actualVerdict.equals("TLE")) {
-                        tc.setStrengthStatus("Strong");
-                    } else if (tc.getStrengthStatus() == null || tc.getStrengthStatus().isEmpty()) {
-                        tc.setStrengthStatus("Normal");
-                    }
+                testCases.parallelStream().forEach(tc -> {
+                    int sampleIndex = currentSampleIndex;
+                    try {
+                        // Chạy code mẫu qua từng testcase
+                        ExecutionResult execResult = executor.runCode(tempDir, tc.getInputData(), timeLimitMs);
+                        
+                        String actualVerdict;
+                        if (finalCheckerExePath != null) {
+                            // Nếu bài toán có cung cấp custom checker
+                            actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), finalCheckerExePath);
+                        } else {
+                            // So khớp chính xác mặc định
+                            actualVerdict = getVerdict(execResult, tc.getExpectedOutput());
+                        }
+                        
+                        if (actualVerdict.equals("AC")) {
+                            atomicPassedCount.incrementAndGet();
+                        } else if (actualVerdict.equals("TLE")) {
+                            atomicHasTLE.set(true);
+                        }
 
-                    // Ghi nhận chi tiết
-                    EvaluationResult tcResult = new EvaluationResult(0, i, tc.getId(), actualVerdict, execResult.getOutput(), execResult.getExecutionTime());
-                    report.addResult(tcResult);
-                }
+                        // Cập nhật độ mạnh của Test Case 
+                        synchronized(tc) {
+                            if (expected.equals("WA") && actualVerdict.equals("WA")) {
+                                tc.setStrengthStatus("Strong");
+                            } else if (expected.equals("TLE") && actualVerdict.equals("TLE")) {
+                                tc.setStrengthStatus("Strong");
+                            } else if (tc.getStrengthStatus() == null || tc.getStrengthStatus().isEmpty()) {
+                                tc.setStrengthStatus("Normal");
+                            }
+                        }
+
+                        // Ghi nhận chi tiết
+                        EvaluationResult tcResult = new EvaluationResult(0, sampleIndex, tc.getId(), actualVerdict, execResult.getOutput(), execResult.getExecutionTime());
+                        synchronized(report) {
+                            report.addResult(tcResult);
+                        }
+                    } catch (Exception ex) {
+                        // ignore ex
+                    }
+                });
+
+                passedCount = atomicPassedCount.get();
+                hasTLE = atomicHasTLE.get();
 
                 // Xóa file tạm sau khi chấm hết các TC
                 try {
@@ -242,8 +258,7 @@ public class EvaluationService {
         } else if (checkerResult.getExitCode() == 2) {
             return "PE"; // Có thể nhóm chung vào WA hoặc để PE
         } else {
-            System.err.println("Checker thất bại hoặc lỗi nghiêm trọng: " + checkerResult.getError());
-            return "CHECKER_ERROR";
+            return "CHECKER_ERROR " + checkerResult.getExitCode() + ":" + checkerResult.getError() + " | actual: " + actual;
         }
     }
 
