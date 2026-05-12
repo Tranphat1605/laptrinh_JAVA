@@ -58,8 +58,8 @@ public class TeacherFrame extends JFrame {
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
-        // controller     = new TeacherController("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");
-        controller     = new TeacherController("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");
+        // API key chỉ cần đặt ở 1 chỗ này
+        controller     = new TeacherController("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");
         evalController = new EvaluationController();
 
         // Top: Stepper

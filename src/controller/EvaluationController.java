@@ -86,9 +86,12 @@ public class EvaluationController {
                 File genExe = new File(tempDir.toFile(), "gen.exe");
 
                 ProcessBuilder pbGen = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), genCpp.getAbsolutePath(), "-o", genExe.getAbsolutePath());
+                pbGen.redirectErrorStream(true);
                 Process pGen = pbGen.start();
                 if (!pGen.waitFor(15, TimeUnit.SECONDS) || pGen.exitValue() != 0) {
-                    throw new Exception("Biên dịch Generator thất bại! Vui lòng kiểm tra lại code AI sinh ra.");
+                    String err = new String(pGen.getInputStream().readAllBytes());
+                    if (pGen.isAlive()) pGen.destroyForcibly();
+                    throw new Exception("Biên dịch Generator thất bại! Vui lòng kiểm tra lại code AI sinh ra. Output: " + err);
                 }
 
                 // 3. Biên dịch AC Code (C++)
@@ -98,9 +101,12 @@ public class EvaluationController {
                 File acExe = new File(tempDir.toFile(), "ac.exe");
 
                 ProcessBuilder pbAc = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), acCpp.getAbsolutePath(), "-o", acExe.getAbsolutePath());
+                pbAc.redirectErrorStream(true);
                 Process pAc = pbAc.start();
                 if (!pAc.waitFor(15, TimeUnit.SECONDS) || pAc.exitValue() != 0) {
-                    throw new Exception("Biên dịch AC Code thất bại!");
+                    String err = new String(pAc.getInputStream().readAllBytes());
+                    if (pAc.isAlive()) pAc.destroyForcibly();
+                    throw new Exception("Biên dịch AC Code thất bại! Output: " + err);
                 }
 
                 // 4. Vòng lặp Sinh Input & Lấy Output chuẩn
@@ -190,7 +196,13 @@ public class EvaluationController {
                 for (int i = 0; i < maxCount; i++) modeList.add("max");
                 for (int i = 0; i < randomCount; i++) modeList.add("random");
 
-                Path tempDir = Files.createTempDirectory("testcase_gen_");
+                // Tạo thư mục lưu trữ testcase ngay trong dự án
+                File workspaceDir = new File("testcases_data/problem_" + problemId);
+                if (!workspaceDir.exists()) {
+                    workspaceDir.mkdirs();
+                }
+                Path tempDir = workspaceDir.toPath();
+
                 File testlibSrc = new File("lib/testlib.h");
                 if (testlibSrc.exists()) {
                     Files.copy(testlibSrc.toPath(), tempDir.resolve("testlib.h"), StandardCopyOption.REPLACE_EXISTING);
@@ -204,9 +216,12 @@ public class EvaluationController {
                 File genExe = new File(tempDir.toFile(), "gen.exe");
 
                 ProcessBuilder pbGen = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), genCpp.getAbsolutePath(), "-o", genExe.getAbsolutePath());
+                pbGen.redirectErrorStream(true);
                 Process pGen = pbGen.start();
-                if (!pGen.waitFor(15, TimeUnit.SECONDS) || pGen.exitValue() != 0) {
-                    throw new Exception("Biên dịch Generator thất bại! Lỗi: " + new String(pGen.getErrorStream().readAllBytes()));
+                if (!pGen.waitFor(60, TimeUnit.SECONDS) || pGen.exitValue() != 0) {
+                    String err = new String(pGen.getInputStream().readAllBytes());
+                    if (pGen.isAlive()) pGen.destroyForcibly();
+                    throw new Exception("Biên dịch Generator thất bại! Exit: " + (pGen.isAlive() ? "TIMEOUT" : pGen.exitValue()) + " Lỗi: " + err);
                 }
 
                 listener.onProgress(0, totalCases, "Đang biên dịch chuẩn AC Code (C++)...");
@@ -215,50 +230,13 @@ public class EvaluationController {
                 File acExe = new File(tempDir.toFile(), "ac.exe");
 
                 ProcessBuilder pbAc = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), acCpp.getAbsolutePath(), "-o", acExe.getAbsolutePath());
+                pbAc.redirectErrorStream(true);
                 Process pAc = pbAc.start();
-                if (!pAc.waitFor(15, TimeUnit.SECONDS) || pAc.exitValue() != 0) {
-                    throw new Exception("Biên dịch AC Code thất bại! Lỗi: " + new String(pAc.getErrorStream().readAllBytes()));
+                if (!pAc.waitFor(60, TimeUnit.SECONDS) || pAc.exitValue() != 0) {
+                    String err = new String(pAc.getInputStream().readAllBytes());
+                    if (pAc.isAlive()) pAc.destroyForcibly();
+                    throw new Exception("Biên dịch AC Code thất bại! Exit: " + (pAc.isAlive() ? "TIMEOUT" : pAc.exitValue()) + " Lỗi: " + err);
                 }
-
-                // Bảo đảm có tham chiếu Problem hợp lệ trong DB để không bị lỗi Khóa Ngoại (Foreign Key)
-                dal.ProblemDAO problemDao = new dal.ProblemDAO();
-                java.util.List<entity.Problem> probs = problemDao.getAllProblems();
-                int safeProblemId = problem != null ? problem.getId() : 1;
-                
-                // Nếu chưa có, ta tự sinh Problem từ dữ liệu AI đã phân tích được
-                if (probs.isEmpty() || safeProblemId == 0) {
-                    entity.Problem dbProblem = new entity.Problem(0, 
-                        problem != null && problem.getTitle() != null ? problem.getTitle() : "Bài tập chưa phân loại (Auto Gen)", 
-                        problem != null && problem.getContent() != null ? problem.getContent() : "Được tạo tự động bởi Hệ thống AI", 
-                        problem != null ? problem.getTimeLimitMs() : 2000, 
-                        problem != null ? problem.getMemoryLimitMb() : 256, 
-                        "AI Sandbox"
-                    );
-                    problemDao.addProblem(dbProblem);
-                    probs = problemDao.getAllProblems();
-                    if (!probs.isEmpty()) {
-                        safeProblemId = probs.get(probs.size() - 1).getId();
-                        if (problem != null) {
-                            problem.setId(safeProblemId); // Cập nhật lại ID cho Frontend sử dụng khi lấy List<TestCase>
-                        }
-                    }
-                }
-
-                // --- MỚI THÊM: LƯU CHECKER VÀ CODE MẪU (AC, WA) VÀO DATABASE ---
-                if (checkerCode != null && !checkerCode.trim().isEmpty() && !checkerCode.startsWith("//")) {
-                    dal.CheckerDAO checkerDao = new dal.CheckerDAO();
-                    entity.Checker checker = new entity.Checker(safeProblemId, cleanMarkdown(checkerCode), "cpp");
-                    checkerDao.addChecker(checker);
-                }
-                
-                dal.SampleCodeDAO sampleDao = new dal.SampleCodeDAO();
-                if (acCode != null && !acCode.trim().isEmpty() && !acCode.startsWith("Đang")) {
-                    sampleDao.addSampleCode(new entity.SampleCode(safeProblemId, cleanMarkdown(acCode), "cpp", "AC"));
-                }
-                if (waCode != null && !waCode.trim().isEmpty() && !waCode.startsWith("Đang")) {
-                    sampleDao.addSampleCode(new entity.SampleCode(safeProblemId, cleanMarkdown(waCode), "cpp", "WA"));
-                }
-                // -------------------------------------------------------------
 
                 dal.TestCaseDAO dao = new dal.TestCaseDAO();
                 int successCount = 0;
@@ -268,30 +246,29 @@ public class EvaluationController {
                     String seed = String.valueOf(System.currentTimeMillis() + i);
                     listener.onProgress(i, totalCases, "Đang sinh Testcase " + (i + 1) + "/" + totalCases + " (Mode: " + currentMode + ")");
                     
-                    // 1. Chạy Generator (Ghi thẳng ra file để chống lag/deadlock buffer)
-                    File genOutFile = new File(tempDir.toFile(), "gen_out.txt");
+                    File inputTxt = new File(tempDir.toFile(), "input_" + i + ".txt");
+                    File outputTxt = new File(tempDir.toFile(), "output_" + i + ".txt");
+
                     ProcessBuilder pbRunGen = new ProcessBuilder(genExe.getAbsolutePath(), seed, currentMode);
-                    pbRunGen.redirectOutput(genOutFile);
+                    pbRunGen.redirectOutput(inputTxt);
                     Process runGen = pbRunGen.start();
                     
-                    if (!runGen.waitFor(2, TimeUnit.SECONDS)) {  // Fast-fail sau 2s
+                    if (!runGen.waitFor(300, TimeUnit.SECONDS)) {
                         runGen.destroyForcibly();
-                        throw new Exception("Code Generator (Bước 2) bị treo hoặc chạy quá 2s! Vui lòng tự SỬA BẰNG TAY mã C++ trên màn hình thay vì gọi AI để đỡ tốn Quota.");
+                        throw new Exception("Quá thời gian sinh Testcase (5 phút). Có thể file quá lớn hoặc vòng lặp vô hạn!");
                     }
-                    String generatedInput = Files.readString(genOutFile.toPath());
+                    String generatedInput = Files.readString(inputTxt.toPath());
 
-                    // 2. Chạy AC Code để ra Output chuẩn
-                    File acOutFile = new File(tempDir.toFile(), "ac_out.txt");
                     ProcessBuilder pbRunAc = new ProcessBuilder(acExe.getAbsolutePath());
-                    pbRunAc.redirectInput(genOutFile); // Đọc input trực tiếp từ file gen
-                    pbRunAc.redirectOutput(acOutFile); // Ghi output thẳng ra file
+                    pbRunAc.redirectInput(inputTxt);
+                    pbRunAc.redirectOutput(outputTxt);
                     Process runAc = pbRunAc.start();
                     
-                    if (!runAc.waitFor(2, TimeUnit.SECONDS)) { // Fast-fail sau 2s
+                    if (!runAc.waitFor(300, TimeUnit.SECONDS)) {
                         runAc.destroyForcibly();
-                        throw new Exception("Code Mẫu AC (Bước 3) chạy quá giới hạn 2 giây (TLE)! Tự SỬA LẠI TAY thuật toán cho tối ưu hơn trên giao diện nhé.");
+                        throw new Exception("Quá thời gian thực thi mã chuẩn AC chạy Testcase (5 phút).");
                     }
-                    String expectedOutput = Files.readString(acOutFile.toPath());
+                    String expectedOutput = Files.readString(outputTxt.toPath());
 
                     // Insert vào CSDL
                     TestCase tc = new TestCase();
@@ -304,8 +281,10 @@ public class EvaluationController {
                     }
                 }
 
-                for (File f : tempDir.toFile().listFiles()) f.delete();
-                Files.delete(tempDir);
+                // Không xóa file đi nữa để người dùng có thể xem lại dữ liệu thô trên ổ cứng
+                // (Chỉ cân nhắc xóa file .exe để dọn dẹp)
+                new File(tempDir.toFile(), "gen.exe").delete();
+                new File(tempDir.toFile(), "ac.exe").delete();
 
                 listener.onProgress(totalCases, totalCases, "Đã lưu " + successCount + "/" + totalCases + " Testcases vào Database.");
                 listener.onComplete(null);
@@ -319,16 +298,13 @@ public class EvaluationController {
     private String cleanMarkdown(String code) {
         if (code == null) return "";
         code = code.trim();
-        // Remove markdown wrapper if it exists (e.g., ```cpp ... ```)
-        if (code.startsWith("```")) {
-            // Find the end of the first line (e.g., ```cpp)
-            int firstNewline = code.indexOf('\n');
-            if (firstNewline != -1) {
-                code = code.substring(firstNewline + 1);
-            }
-            // Remove the closing ``` if it exists at the end
-            if (code.endsWith("```")) {
-                code = code.substring(0, code.length() - 3);
+        // Regex để loại bỏ tất cả text bên ngoài block code ```cpp ... ```
+        if (code.contains("```")) {
+            int startCode = code.indexOf("```");
+            int firstNewline = code.indexOf('\n', startCode);
+            int endCode = code.lastIndexOf("```");
+            if (firstNewline != -1 && endCode > firstNewline) {
+                return code.substring(firstNewline + 1, endCode).trim();
             }
         }
         return code.trim();

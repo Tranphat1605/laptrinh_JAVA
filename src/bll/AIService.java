@@ -97,11 +97,13 @@ public class AIService {
                 "=== YÊU CẦU ===\n" +
                 "Viết code C++ generator sử dụng testlib.h để tự động sinh dữ liệu input cho bài toán trên.\n" +
                 "Bắt buộc:\n" +
-                "1. BẮT BUỘC #include <bits/stdc++.h> hoặc đầy đủ các thư viện C++ cần thiết (<iostream>, <cmath>, <vector>, v.v.) trước khi #include \"testlib.h\" để không bị lỗi Missing Declaration khi biên dịch.\n" +
+                "1. Luôn khai báo đầy đủ `#include <iostream>` và `using namespace std;` ở đầu file.\n" +
                 "2. Dòng đầu tiên trong main: registerGen(argc, argv, 1);\n" +
                 "3. Hỗ trợ seed từ argv[1].\n" +
                 "4. In ra đúng định dạng Input mà đề bài yêu cầu, không in text thừa.\n" +
-                "5. CHÚ Ý QUAN TRỌNG VỀ ĐỘ MẠNH (STRONG TESTCASES):\n" +
+                "5. LƯU Ý QUAN TRỌNG VỀ testlib.h: ĐỂ SINH SỐ NGẪU NHIÊN, BẮT BUỘC DÙNG `rnd.next(min, max)`.\n" +
+                "   -> KHÔNG BAO GIỜ được dùng các hàm tự bịa hoặc viết sai chính tả như `inf.ReadInt()`, `inf.readInt()` vì Generator KHÔNG đọc dữ liệu (inf) mà là SINH dữ liệu (rnd).\n"+
+                "6. CHÚ Ý QUAN TRỌNG VỀ ĐỘ MẠNH (STRONG TESTCASES):\n" +
                 "   - Generator cần lấy arg từ argv[2] (nếu truyền vào) làm tham số để quyết định mode sinh testcase.\n" +
                 "   - Nếu mode là 'edge': hãy sinh các trường hợp biên, giá trị tối thiểu, tối đa (VD: N=0, N=1, mảng rỗng, mảng gồm các phần tử bằng nhau hoặc âm hoàn toàn).\n" +
                 "   - Nếu mode là 'max': phải sinh Input sao cho N hoặc giá trị đạt sát Tối Đa của ràng buộc đề bài (áp lực cao để tạo TLE/MLE).\n" +
