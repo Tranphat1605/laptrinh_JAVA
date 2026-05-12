@@ -5,11 +5,9 @@ import controller.TeacherController;
 import entity.EvaluationReport;
 import entity.EvaluationResult;
 import entity.Problem;
-
 import java.awt.*;
 import java.io.File;
 import javax.swing.*;
-import javax.swing.SwingUtilities;
 
 /**
  * View: chỉ chứa code xây dựng giao diện Swing.
@@ -58,8 +56,8 @@ public class TeacherFrame extends JFrame {
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
-
-        controller     = new TeacherController("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");
+        // TODO: Thay API key của bạn vào đây, truy cập https://console.groq.com/keys để lấy 
+        controller     = new TeacherController("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");
         evalController = new EvaluationController();
 
         // Top: Stepper
@@ -352,7 +350,7 @@ public class TeacherFrame extends JFrame {
                 });
         });
 
-        JButton btnRunCpp = new JButton("> Chạy Code C++ để Sinh 20 Testcase vào Database");
+        JButton btnRunCpp = new JButton("> Chạy Code C++ Sinh 20 Testcase (Lưu Tạm)");
         btnRunCpp.setBackground(new Color(255, 140, 0));
         btnRunCpp.setForeground(Color.WHITE);
         btnRunCpp.addActionListener(e -> {
@@ -387,7 +385,7 @@ public class TeacherFrame extends JFrame {
              
              JPanel topP = new JPanel(new BorderLayout(5, 5));
              topP.setBorder(BorderFactory.createEmptyBorder(10, 10, 5, 10));
-             topP.add(new JLabel("Đang kích hoạt môi trường C++ và chuẩn bị sinh Testcases (vào Database)..."), BorderLayout.NORTH);
+             topP.add(new JLabel("Đang kích hoạt môi trường C++ và chuẩn bị sinh Testcases (vào Bộ Nhớ Tạm)..."), BorderLayout.NORTH);
              topP.add(pb, BorderLayout.CENTER);
              
              progressDialog.add(topP, BorderLayout.NORTH);
@@ -398,7 +396,7 @@ public class TeacherFrame extends JFrame {
              botP.add(btnClose);
              progressDialog.add(botP, BorderLayout.SOUTH);
 
-             evalController.compileAndGenerateTestcases(genCode, acCode, currentProblem, 20, new EvaluationController.EvaluationListener() {
+             evalController.compileAndGenerateTestcases(controller.getAiService(), genCode, acCode, currentProblem, 20, new EvaluationController.EvaluationListener() {
                  @Override public void onStart() {
                      SwingUtilities.invokeLater(() -> {
                          updateStatus("🔄 Đang thao tác CSDL...");
@@ -416,8 +414,9 @@ public class TeacherFrame extends JFrame {
                  }
                  @Override public void onComplete(EvaluationReport report) {
                      SwingUtilities.invokeLater(() -> {
-                         updateStatus("✅ AI Service: Sẵn sàng | Hoàn tất lưu Testcases!");
-                         logArea.append("\n✅ HOÀN TẤT: Toàn bộ Testcases đã được lưu thành công vào Database!\n");
+                         updateStatus("✅ AI Service: Sẵn sàng | Hoàn tất sinh Testcases lưu tạm!");
+                         logArea.append("\n✅ HOÀN TẤT: Toàn bộ Testcases đã được LƯU TẠM thành công!\n");
+                         logArea.append("Bấm 'Tiếp theo' sang Bước 4 để Chạy Code Học Sinh và Kiểm định trước khi lưu CSDL.\n");
                          pb.setValue(100);
                          pb.setString("Hoàn thành quá trình sinh!");
                          
@@ -635,10 +634,24 @@ public class TeacherFrame extends JFrame {
                     
                     btnClose.setText("Đóng Báo Cáo");
                     btnClose.setEnabled(true);
-                    btnClose.setBackground(new Color(34, 139, 34));
-                    btnClose.setForeground(Color.WHITE);
+                    btnClose.setBackground(new Color(200, 200, 200));
+                    btnClose.setForeground(Color.BLACK);
                     for (java.awt.event.ActionListener al : btnClose.getActionListeners()) btnClose.removeActionListener(al);
                     btnClose.addActionListener(ev -> progressDialog.dispose());
+                    
+                    JButton btnSaveDB = new JButton("Lưu Testcases vào CSDL");
+                    btnSaveDB.setBackground(new Color(34, 139, 34));
+                    btnSaveDB.setForeground(Color.WHITE);
+                    btnSaveDB.addActionListener(ev -> {
+                        if (evalController.savePendingTestCasesToDB()) {
+                            JOptionPane.showMessageDialog(progressDialog, "Đã lưu toàn bộ Testcase vào Database thành công!");
+                            progressDialog.dispose();
+                        } else {
+                            JOptionPane.showMessageDialog(progressDialog, "Lỗi khi lưu vào Database!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        }
+                    });
+                    botP.add(btnSaveDB, 0);
+                    botP.revalidate();
                 });
             }
             @Override public void onError(Exception e) {

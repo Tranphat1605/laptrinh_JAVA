@@ -48,14 +48,13 @@ public class AIService {
      * Phân tích đề bài từ Text hoặc Ảnh
      */
     public Problem analyzeProblem(String text, File imageFile) throws Exception {
-        String prompt = "Bạn là một AI chuyên gia về lập trình thi đấu (IOI, ICPC). " +
-                "Hãy phân tích đề bài sau và trích xuất các thông tin dưới định dạng JSON.\n" +
-                "Yêu cầu các trường JSON bắt buộc:\n" +
-                "1. \"title\": Tên bài (nếu không có trong đề, hãy tự đặt ngắn gọn).\n" +
-                "2. \"timeLimitMs\": Giới hạn thời gian tính bằng số milliseconds (Ví dụ 1 giây = 1000). Nếu không tìm thấy, trả về 1000.\n" +
-                "3. \"memoryLimitMb\": Giới hạn bộ nhớ tính bằng số Megabytes. Nếu không tìm thấy, trả về 256.\n" +
-                "4. \"content\": Gom chung TẤT CẢ các phần: Mô tả yêu cầu, Giới hạn đầu vào (Constraints), Định dạng Input, Định dạng Output vào thành một đoạn văn bản tóm tắt mạch lạc.\n" +
-                "Chỉ trả về NGAY khối JSON hợp lệ, KHÔNG VIẾT GÌ THÊM (no markdown, no extra text).";
+        String prompt = "You are a Competitive Programming Expert. Analyze the provided problem and return a JSON object.\n" +
+                "JSON Structure:\n" +
+                "1. \"title\": Short title.\n" +
+                "2. \"timeLimitMs\": Integer (default 1000).\n" +
+                "3. \"memoryLimitMb\": Integer (default 256).\n" +
+                "4. \"content\": Comprehensive summary including requirements, constraints, input/output formats.\n" +
+                "Output ONLY valid JSON. No markdown.";
 
         String imageBase64 = null;
         if (imageFile != null && imageFile.exists()) {
@@ -87,82 +86,160 @@ public class AIService {
      * Sinh code C++ Generator sử dụng testlib.h
      */
     public String generateGeneratorCode(Problem problem) throws Exception {
-        String systemPrompt = "Bạn là chuyên gia lập trình thi đấu (ICPC/IOI). " +
-                "Nhiệm vụ của bạn là viết code C++ hoàn chỉnh sử dụng testlib.h để sinh dữ liệu test. " +
-                "Chỉ trả về code C++ thuần túy, không markdown, không giải thích.";
-        String userPrompt =
-                "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
-                "=== YÊU CẦU ===\n" +
-                "Viết code C++ generator sử dụng testlib.h để tự động sinh dữ liệu input cho bài toán trên.\n" +
-                "Bắt buộc:\n" +
-                "1. BẮT BUỘC #include <bits/stdc++.h> hoặc đầy đủ các thư viện C++ cần thiết (<iostream>, <cmath>, <vector>, v.v.) trước khi #include \"testlib.h\" để không bị lỗi Missing Declaration khi biên dịch.\n" +
-                "2. Dòng đầu tiên trong main: registerGen(argc, argv, 1);\n" +
-                "3. Hỗ trợ seed từ argv[1].\n" +
-                "4. In ra đúng định dạng Input mà đề bài yêu cầu, không in text thừa.\n" +
-                "5. CHÚ Ý QUAN TRỌNG VỀ ĐỘ MẠNH (STRONG TESTCASES):\n" +
-                "   - Generator cần lấy arg từ argv[2] (nếu truyền vào) làm tham số để quyết định mode sinh testcase.\n" +
-                "   - Nếu mode là 'edge': hãy sinh các trường hợp biên, giá trị tối thiểu, tối đa (VD: N=0, N=1, mảng rỗng, mảng gồm các phần tử bằng nhau hoặc âm hoàn toàn).\n" +
-                "   - Nếu mode là 'max': phải sinh Input sao cho N hoặc giá trị đạt sát Tối Đa của ràng buộc đề bài (áp lực cao để tạo TLE/MLE).\n" +
-                "   - Nếu mode là 'random' hoặc không có mode, sinh Random ngẫu nhiên.\n" +
-                "   - TUYỆT ĐỐI KHÔNG sử dụng hàm quit() với 1 tham số (vd: quit(\"lỗi\")). Nếu cần báo lỗi hãy dùng quitf(_fail, \"Lỗi...\");\n" +
-                "\nChỉ trả về code C++, không markdown.";
+        String systemPrompt = "You are a Competitive Programming Expert specializing in 'testlib.h' for C++. " +
+                "Your task is to write a robust, professional Generator. " +
+                "Output ONLY raw C++ code. No markdown, no explanations.";
+
+        String userPrompt = "### PROBLEM CONTEXT\n" + problem.toString() + "\n\n" +
+                "### GENERATOR REQUIREMENTS\n" +
+                "Write a C++ generator using 'testlib.h' to produce input cases for the above problem.\n\n" +
+                "1. MANDATORY STRUCTURE:\n" +
+                "   - Include <bits/stdc++.h> then \"testlib.h\".\n" +
+                "   - Use 'using namespace std;'.\n" +
+                "   - First line in main: registerGen(argc, argv, 1);\n" +
+                "   - Use argv[1] as seed.\n\n" +
+                "2. MODE-BASED GENERATION (argv[2]):\n" +
+                "   - If argv[2] == 'edge': Generate minimal/boundary cases.\n" +
+                "   - If argv[2] == 'max': Generate cases at the absolute MAXIMUM constraints.\n" +
+                "   - If argv[2] == 'random': Generate balanced random cases.\n\n" +
+                "3. CRITICAL TESTLIB RULES:\n" +
+                "   - DO NOT use 'inf', 'ouf', or 'ans' in a Generator. Use ONLY 'rnd.next()'.\n" +
+                "   - AMBIGUITY FIX: Both arguments of rnd.next() MUST be the same type (e.g., rnd.next(1LL, 200LL)).\n" +
+                "   - Use ONLY 'cout <<' for output. DO NOT read from stdin.\n\n" +
+                "4. SAFETY:\n" +
+                "   - Use '1LL << n' instead of 'pow(2, n)' for integers.\n" +
+                "   - No markdown. Output raw code only.";
+
         String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
-        return sendRequestWithRetry(payload);
+        String code = sendRequestWithRetry(payload);
+        return validateAndFixCppCode(code, "generator");
     }
 
     /**
      * Sinh checker C++ (nếu bài toán có nhiều cách giải đúng)
      */
     public String generateChecker(Problem problem) throws Exception {
-        String systemPrompt = "Bạn là chuyên gia lập trình thi đấu (ICPC/IOI). " +
-                "Nhiệm vụ là viết checker testlib.h để so khớp đáp án. Chỉ trả về code C++ thuần túy.";
-        String userPrompt =
-                "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
-                "=== YÊU CẦU ===\n" +
-                "Viết code C++ checker sử dụng testlib.h cho bài toán trên.\n" +
-                "- BẮT BUỘC #include <bits/stdc++.h> hoặc đầy đủ các thư viện C++ cần thiết (<iostream>, <cmath>, <vector>, v.v.) trước khi #include \"testlib.h\" để không bị lỗi Missing Declaration khi biên dịch.\n" +
-                "- Dòng đầu tiên trong main BẮT BUỘC phải là: registerTestlibCmd(argc, argv);\n" +
-                "- BẮT BUỘC sử dụng: inf.read... để đọc input.\n" +
-                "- BẮT BUỘC sử dụng: ans.read... để đọc đáp án chuẩn.\n" +
-                "- BẮT BUỘC sử dụng: ouf.read... để đọc output của thí sinh.\n" +
-                "- TUYỆT ĐỐI KHÔNG SỬ DỤNG std::cin hay std::cout hay scanf/printf.\n" +
-                "- Gọi quitf(_ok, ...) nếu đúng, hoặc quitf(_wa, ...) nếu sai.\n" +
-                "Chỉ trả về code C++, không markdown.";
+        String systemPrompt = "You are a Competitive Programming Expert specializing in 'testlib.h' for C++. " +
+                "Output ONLY raw C++ code. No markdown, no explanations.";
+
+        String userPrompt = "### PROBLEM CONTEXT\n" + problem.toString() + "\n\n" +
+                "### CHECKER REQUIREMENTS\n" +
+                "1. MANDATORY STRUCTURE:\n" +
+                "   - Include <bits/stdc++.h> and \"testlib.h\".\n" +
+                "   - Use 'using namespace std;'.\n" +
+                "   - First line: registerTestlibCmd(argc, argv);\n\n" +
+                "2. STREAM HANDLING:\n" +
+                "   - Use 'inf', 'ans', and 'ouf'.\n" +
+                "   - Methods: readInt(), readLong(), readDouble(), readWord(), readString().\n" +
+                "   - FORBIDDEN: .read(), .readSpace(), .readEoln(), .readByte().\n\n" +
+                "3. RULES:\n" +
+                "   - Use quitf(_ok, ...) or quitf(_wa, ...).\n" +
+                "   - No markdown. Raw code only.";
+
         String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
-        return sendRequestWithRetry(payload);
+        String code = sendRequestWithRetry(payload);
+        return validateAndFixCppCode(code, "checker");
     }
 
     /**
      * Tự động sinh code mẫu AC / WA / TLE
      */
     public String generateSampleCode(Problem problem, String type) throws Exception {
-        String constraintInstructions = "";
-        if (type.equals("AC")) {
-            constraintInstructions = "- Là code C++ giải chuẩn xác nhất, độ phức tạp thời gian cực kỳ tối ưu, qua được toàn bộ các trường hợp Edge Cases và Input cực lớn.\n";
-        } else if (type.equals("WA")) {
-            constraintInstructions = "- Cố tình viết SAI LOGIC ở các TRƯỜNG HỢP BIÊN (Edge cases) nhưng vẫn chạy đúng ở các testcase cơ bản.\n" +
-                                     "- Ví dụ: Không xét trường hợp n=0, hoặc kiểu dữ liệu Int bị tràn số thay vì dùng Long Long, hoặc sai dấu tại điểm giao cắt.\n" +
-                                     "- Không bị TLE, chỉ được in kết quả sai.\n";
-        } else if (type.equals("TLE")) {
-            constraintInstructions = "- Cố tình viết thuật toán VÉT CẠN (Brute-force) có độ phức tạp cao (O(N^2) hoặc O(N^3)) để bị Quá thời gian (Time Limit Exceeded) khi Input lớn.\n" +
-                                     "- Tuyệt đối KHÔNG LẶP VÔ HẠN bằng while(true), code vẫn phải cho ra kết quả đúng nếu chạy đủ lâu.\n";
-        }
+        String instruction = "";
+        if (type.equals("AC")) instruction = "Optimal O(N) or O(N log N) solution.";
+        else if (type.equals("WA")) instruction = "Wrong logic on edge cases.";
+        else if (type.equals("TLE")) instruction = "Slow brute-force solution.";
 
-        String prompt = "Bạn là một thí sinh tham gia kỳ thi lập trình. \n" +
-                "Hãy viết code mẫu bằng C++ cho bài toán sau với phân loại chất lượng là " + type + ".\n" +
-                "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
-                "=== YÊU CẦU ĐỐI VỚI LOẠI CODE " + type + " ===\n" +
-                constraintInstructions + 
-                "- BẮT BUỘC #include đầy đủ các thư viện C++ cần thiết (như <iostream>, <cmath>, <vector>, <algorithm>, v.v.) hoặc dùng <bits/stdc++.h> để không bị lỗi Missing Declaration khi biên dịch.\n" +
-                "\nChỉ trả về mã C++ thuần túy, không format markdown, không giải thích dòng nào cả.";
+        String systemPrompt = "You are a Competitive Programmer. Write a " + type + " solution in C++.";
+        String userPrompt = "### PROBLEM\n" + problem.toString() + "\n\n" +
+                "### TASK\n" + instruction + "\nOutput ONLY raw C++ code. No markdown.";
 
-        String payload = buildTextPayload(TEXT_MODEL, prompt);
-        return sendRequestWithRetry(payload);
+        String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
+        String code = sendRequestWithRetry(payload);
+        return validateAndFixCppCode(code, "solution");
     }
 
     /**
-     * Gửi request tới Groq API kèm cơ chế Retry + xử lý 429 Rate Limit
+     * Gửi code lỗi cho AI sửa
      */
+    public String fixCodeWithAI(String originalCode, String errorMessage, Problem problem, String codeType) throws Exception {
+        String systemPrompt = "You are a C++ Debugging Expert. Fix the compilation error.";
+        String userPrompt = "### BUGGY CODE (" + codeType + ")\n```cpp\n" + originalCode + "\n```\n\n" +
+                "### ERROR\n" + errorMessage + "\n\n### TASK\nFix it now. Output ONLY raw C++ code.";
+
+        String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
+        String fixedCode = sendRequestWithRetry(payload);
+        return validateAndFixCppCode(fixedCode, codeType);
+    }
+
+    /**
+     * Validate và auto-fix các lỗi phổ biến trong code C++
+     */
+    private String validateAndFixCppCode(String code, String codeType) {
+        if (code == null || code.trim().isEmpty()) return code;
+
+        StringBuilder errors = new StringBuilder();
+        String fixedCode = code;
+
+        if ("generator".equals(codeType)) {
+            fixedCode = fixedCode.replaceAll("(inf|ouf|ans)\\.(next|read)[A-Za-z0-9]*", "rnd.next");
+        }
+
+        // 1. NGHIÊM CẤM pow() cho số nguyên - Tự động đổi pow(2, n) và cảnh báo các pow khác
+        if (fixedCode.contains("pow(")) {
+            fixedCode = fixedCode.replaceAll("(?i)pow\\(\\s*(?:2|2LL|2\\.0)\\s*,\\s*([^\\)]+?)\\s*\\)", "(1LL << $1)");
+            if (fixedCode.contains("pow(")) {
+                errors.append("- CẢNH BÁO CỰC NGUY HIỂM: Phát hiện hàm pow(). pow() trả về double, gây mất chính xác cho số lớn. Hãy dùng vòng lặp hoặc lũy thừa nhanh!\n");
+            }
+        }
+
+        // 2. Kiểm tra tràn số với bit shift (n > 62)
+        if (fixedCode.contains("<<")) {
+            errors.append("- CẢNH BÁO: Kiểm tra kỹ giới hạn dịch bit. 1LL << n chỉ chạy đúng với n < 63. Nếu N=200 sẽ bị TRÀN SỐ!\n");
+        }
+
+        fixedCode = fixedCode.replaceAll("(\\d+LL)\\s{2,}([\\(A-Za-z])", "$1 * $2");
+        fixedCode = fixedCode.replaceAll("(\\d+LL)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*([+\\-*/]|\\)|;|,)", "$1 * $2 $3");
+        fixedCode = fixedCode.replaceAll("(\\d+)\\s+([A-Z_][A-Za-z0-9_]*)\\s*([+\\-*/]|\\)|;|,|$)", "$1LL * $2 $3");
+        
+        fixedCode = fixRndNextAmbiguity(fixedCode);
+
+        if (fixedCode.contains("int main(int argc, char* argv)")) {
+            fixedCode = fixedCode.replace("int main(int argc, char* argv)", "int main(int argc, char* argv[])");
+        }
+
+        if (!fixedCode.contains("bits/stdc++.h")) fixedCode = "#include <bits/stdc++.h>\n" + fixedCode;
+        if (!fixedCode.contains("using namespace std")) {
+            int firstInclude = fixedCode.lastIndexOf("#include");
+            if (firstInclude != -1) {
+                int nextLine = fixedCode.indexOf('\n', firstInclude);
+                fixedCode = fixedCode.substring(0, nextLine + 1) + "using namespace std;\n" + fixedCode.substring(nextLine + 1);
+            }
+        }
+
+        if (errors.length() > 0) {
+            System.err.println("\n=== CODE VALIDATION REPORT ===\n" + errors.toString() + "===============================\n");
+        }
+        return fixedCode;
+    }
+
+    private String fixRndNextAmbiguity(String code) {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(?i)rnd\\.next\\(([^,]+),\\s*([^)]+)\\)");
+        java.util.regex.Matcher matcher = pattern.matcher(code);
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            String f = matcher.group(1).trim(), s = matcher.group(2).trim();
+            boolean fL = f.toLowerCase().endsWith("l"), sL = s.toLowerCase().endsWith("l");
+            String rep;
+            if (!fL && sL) rep = f.matches("\\d+") ? "rnd.next(" + f + "LL, " + s + ")" : "rnd.next((long long)" + f + ", " + s + ")";
+            else if (fL && !sL) rep = s.matches("\\d+") ? "rnd.next(" + f + ", " + s + "LL)" : "rnd.next(" + f + ", (long long)" + s + ")";
+            else rep = matcher.group(0);
+            matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(rep));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
     private String sendRequestWithRetry(String jsonPayload) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(GROQ_API_URL))
@@ -172,152 +249,76 @@ public class AIService {
                 .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
                 .build();
 
-        int attempts = 0;
-        while (attempts < MAX_RETRIES) {
+        for (int i = 0; i < MAX_RETRIES; i++) {
             try {
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                 int status = response.statusCode();
-                JsonObject jsonResponse = gson.fromJson(response.body(), JsonObject.class);
+                String body = response.body();
 
                 if (status == 200) {
-                    if (jsonResponse.has("choices")) {
-                        JsonArray choices = jsonResponse.getAsJsonArray("choices");
-                        if (choices.size() > 0) {
-                            JsonObject message = choices.get(0).getAsJsonObject()
-                                    .getAsJsonObject("message");
-                            if (message != null && message.has("content")) {
-                                return stripMarkdown(message.get("content").getAsString());
-                            }
-                        }
-                    }
-                    throw new Exception("API trả về thành công nhưng không tìm thấy nội dung.");
-
-                } else if (status == 429) {
-                    // Rate Limit: đợi rồi thử lại
-                    long waitSecs = 60; // mặc định 60s
-                    // Cố gắng đọc Retry-After header nếu có
-                    response.headers().firstValue("retry-after")
-                            .ifPresent(v -> { /* không thể assign lại, dùng giá trị mặc định */ });
-                    attempts++;
-                    if (attempts >= MAX_RETRIES) {
-                        throw new Exception("⚠ Groq API đang bị giới hạn Token/phút (429 Rate Limit).\n"
-                            + "Vui lòng đợi 1-2 phút rồi thử lại, hoặc rút ngắn đề bài.");
-                    }
-                    System.err.println("[429 Rate Limit] Đợi " + waitSecs + "s trước khi thử lại (lần " + attempts + "/" + MAX_RETRIES + ")");
-                    Thread.sleep(waitSecs * 1000L);
-
+                    JsonObject json = gson.fromJson(body, JsonObject.class);
+                    return stripMarkdown(json.getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("message").get("content").getAsString());
                 } else {
-                    System.err.println("Lỗi kết nối AI API " + status + ": " + response.body());
-                    if (jsonResponse != null && jsonResponse.has("error")) {
-                        String errorMsg = jsonResponse.getAsJsonObject("error").get("message").getAsString();
-                        throw new Exception("Lỗi AI API " + status + ": " + errorMsg);
+                    // THÔNG BÁO LỖI CHI TIẾT
+                    if (status == 429) {
+                        System.err.println("[HỆ THỐNG] Lỗi 429: Bạn đang dùng quá nhanh (Rate Limit). Đang đợi 60 giây để thử lại (Lần " + (i + 1) + "/" + MAX_RETRIES + ")...");
+                        Thread.sleep(60000);
+                    } else if (status == 401) {
+                        System.err.println("[HỆ THỐNG] Lỗi 401: API Key của bạn không hợp lệ hoặc đã bị thu hồi.");
+                        throw new Exception("Sai API Key.");
+                    } else if (status == 402 || status == 403) {
+                        System.err.println("[HỆ THỐNG] Lỗi " + status + ": Tài khoản của bạn đã HẾT QUOTA hoặc HẾT TIỀN.");
+                        throw new Exception("Hết hạn mức sử dụng API.");
+                    } else {
+                        System.err.println("[HỆ THỐNG] Lỗi API (Status " + status + "): " + body);
+                        Thread.sleep(2000L * (i + 1));
                     }
-                    attempts++;
-                    Thread.sleep(2000L * attempts);
                 }
-            } catch (IOException | InterruptedException e) {
-                attempts++;
-                if (attempts == MAX_RETRIES) {
-                    throw new Exception("Lỗi kết nối AI API sau " + MAX_RETRIES + " lần thử: " + e.getMessage());
-                }
-                Thread.sleep(2000L * attempts);
+            } catch (Exception e) {
+                if (e.getMessage() != null && (e.getMessage().contains("Key") || e.getMessage().contains("hạn mức"))) throw e;
+                Thread.sleep(2000L * (i + 1));
             }
         }
-        throw new Exception("Thất bại khi lấy dữ liệu từ AI API.");
+        throw new Exception("Thất bại sau " + MAX_RETRIES + " lần thử. Vui lòng kiểm tra console.");
     }
 
-    /**
-     * Xóa markdown formatting từ response của AI (```code```, ###, v.v.)
-     * Llama/Groq thường trả về có markdown dù không yêu cầu.
-     */
     private String stripMarkdown(String text) {
         if (text == null) return "";
-        // Xóa code fence ``` với hoặc không có ngôn ngữ (```json, ```cpp, ```)
+        // 1. Xóa các khối code fence
         text = text.replaceAll("(?s)```[a-zA-Z]*\\n", "").replaceAll("```", "");
-        // Xóa header markdown (### Bài A:  →  Bài A:) nhưng chừa lại dấu # của #include
+        // 2. Xóa các header markdown
         text = text.replaceAll("(?m)^#{1,6}\\s+(?!include)", "");
-        // Xóa bold/italic markdown (**text**, *text*, __text__) (Nhưng bảo vệ các dấu underscore trong C++ như std::mt19937_64)
-        text = text.replaceAll("(?<![a-zA-Z0-9])\\*{1,2}([^*]+)\\*{1,2}(?![a-zA-Z0-9])", "$1");
-        text = text.replaceAll("(?<![a-zA-Z0-9])_{1,2}([^_]+)_{1,2}(?![a-zA-Z0-9])", "$1");
+        
+        // 3. THÔNG MINH: Nếu đây là yêu cầu JSON, hãy cố gắng bóc tách khối { ... }
+        if (text.contains("{") && text.contains("}")) {
+            int start = text.indexOf("{");
+            int end = text.lastIndexOf("}");
+            if (start != -1 && end != -1 && end > start) {
+                return text.substring(start, end + 1).trim();
+            }
+        }
+        
         return text.trim();
     }
 
-    /**
-     * Build payload text-only (OpenAI chat format)
-     */
-    private String buildTextPayload(String model, String userMessage) {
-        return buildPayload(model, userMessage, null, null);
+    private String buildPayload(String model, String prompt, String extra, String img) {
+        JsonObject p = new JsonObject();
+        p.addProperty("model", model);
+        JsonArray m = new JsonArray();
+        JsonObject u = new JsonObject();
+        u.addProperty("role", "user");
+        u.addProperty("content", prompt + (extra != null ? "\n" + extra : ""));
+        m.add(u); p.add("messages", m);
+        return gson.toJson(p);
     }
 
-    /**
-     * Build payload hỗ trợ cả text và ảnh (vision)
-     */
-    private String buildPayload(String model, String prompt, String extraText, String imageBase64) {
-        JsonObject payload = new JsonObject();
-        payload.addProperty("model", model);
-
-        JsonArray messages = new JsonArray();
-        JsonObject userMsg = new JsonObject();
-        userMsg.addProperty("role", "user");
-
-        if (imageBase64 != null) {
-            // Vision: content là mảng gồm text + image_url
-            JsonArray contentArr = new JsonArray();
-
-            JsonObject textPart = new JsonObject();
-            textPart.addProperty("type", "text");
-            textPart.addProperty("text", prompt + (extraText != null ? "\n" + extraText : ""));
-            contentArr.add(textPart);
-
-            JsonObject imagePart = new JsonObject();
-            imagePart.addProperty("type", "image_url");
-            JsonObject imageUrl = new JsonObject();
-            imageUrl.addProperty("url", "data:image/jpeg;base64," + imageBase64);
-            imagePart.add("image_url", imageUrl);
-            contentArr.add(imagePart);
-
-            userMsg.add("content", contentArr);
-        } else {
-            // Text-only: content là string
-            String fullText = prompt + (extraText != null ? "\n" + extraText : "");
-            userMsg.addProperty("content", fullText);
-        }
-
-        messages.add(userMsg);
-        payload.add("messages", messages);
-
-        // Giới hạn output để tránh vượt quota token
-        payload.addProperty("max_tokens", 2048);
-
-        return gson.toJson(payload);
-    }
-
-    /**
-     * Build payload với system prompt + user message (tốt hơn cho code generation).
-     * Groq/OpenAI hỗ trợ role "system" để set ngữ cảnh chuyên gia.
-     */
-    private String buildPayloadWithSystem(String model, String systemPrompt, String userMessage) {
-        JsonObject payload = new JsonObject();
-        payload.addProperty("model", model);
-
-        JsonArray messages = new JsonArray();
-
-        // System message — set vai trò chuyên gia
-        JsonObject sysMsg = new JsonObject();
-        sysMsg.addProperty("role", "system");
-        sysMsg.addProperty("content", systemPrompt);
-        messages.add(sysMsg);
-
-        // User message — đề bài + yêu cầu
-        JsonObject userMsg = new JsonObject();
-        userMsg.addProperty("role", "user");
-        userMsg.addProperty("content", userMessage);
-        messages.add(userMsg);
-
-        payload.add("messages", messages);
-        payload.addProperty("max_tokens", 2048);
-
-        return gson.toJson(payload);
+    private String buildPayloadWithSystem(String model, String sys, String user) {
+        JsonObject p = new JsonObject();
+        p.addProperty("model", model);
+        JsonArray m = new JsonArray();
+        JsonObject sM = new JsonObject(); sM.addProperty("role", "system"); sM.addProperty("content", sys);
+        JsonObject uM = new JsonObject(); uM.addProperty("role", "user"); uM.addProperty("content", user);
+        m.add(sM); m.add(uM); p.add("messages", m);
+        return gson.toJson(p);
     }
 }
-

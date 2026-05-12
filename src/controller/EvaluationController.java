@@ -23,6 +23,9 @@ import java.util.concurrent.TimeUnit;
  */
 public class EvaluationController {
 
+    // Danh sách lưu tạm Testcase trên bộ nhớ
+    private List<TestCase> pendingTestCases = new ArrayList<>();
+
     public interface EvaluationListener {
         /** Gọi ngay khi bắt đầu — trên EDT */
         void onStart();
@@ -35,8 +38,7 @@ public class EvaluationController {
     }
 
     /**
-     * Pipeline sinh Testcase Tự động và đánh giá
-     * @param totalCases Số lượng testcase. Ví dụ: 20
+     * Pipeline sinh Testcase Tự động và đánh giá (Dùng cho luồng Auto-Generate)
      */
     public void runAutomatedEvaluation(Problem problem, AIService aiService, int totalCases, EvaluationListener listener) {
         listener.onStart();
@@ -44,7 +46,6 @@ public class EvaluationController {
         new Thread(() -> {
             try {
                 // 1. Phân bổ số lượng Testcase
-                // Tỷ lệ: 20% edge, 20% max, 60% random (tương đương 4-4-12 nếu tổng=20)
                 int edgeCount = (int) Math.ceil(totalCases * 0.2);
                 int maxCount = (int) Math.ceil(totalCases * 0.2);
                 int randomCount = totalCases - edgeCount - maxCount;
@@ -71,7 +72,6 @@ public class EvaluationController {
 
                 // Thư mục tạm
                 Path tempDir = Files.createTempDirectory("auto_pipeline_");
-                // Copy testlib.h vào thư mục tạm để biên dịch Generator
                 File testlibSrc = new File("lib/testlib.h");
                 if (testlibSrc.exists()) {
                     Files.copy(testlibSrc.toPath(), tempDir.resolve("testlib.h"), StandardCopyOption.REPLACE_EXISTING);
@@ -79,28 +79,44 @@ public class EvaluationController {
                     throw new Exception("Không tìm thấy file lib/testlib.h trong dự án!");
                 }
 
-                // 2. Biên dịch Generator (C++)
-                listener.onProgress(0, totalCases, "Đang biên dịch Generator...");
+                // 2. Biên dịch Generator (Thử tối đa 3 lần với AI Self-Fix)
                 File genCpp = new File(tempDir.toFile(), "gen.cpp");
-                Files.writeString(genCpp.toPath(), cleanMarkdown(generatorCode));
                 File genExe = new File(tempDir.toFile(), "gen.exe");
-
-                ProcessBuilder pbGen = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), genCpp.getAbsolutePath(), "-o", genExe.getAbsolutePath());
-                Process pGen = pbGen.start();
-                if (!pGen.waitFor(15, TimeUnit.SECONDS) || pGen.exitValue() != 0) {
-                    throw new Exception("Biên dịch Generator thất bại! Vui lòng kiểm tra lại code AI sinh ra.");
+                String currentGenCode = generatorCode;
+                for (int attempt = 1; attempt <= 3; attempt++) {
+                    listener.onProgress(0, totalCases, "Biên dịch Generator (Lần " + attempt + ")...");
+                    Files.writeString(genCpp.toPath(), injectTestlib(cleanMarkdown(currentGenCode)));
+                    File genErrFile = new File(tempDir.toFile(), "gen_err.txt");
+                    ProcessBuilder pbGen = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), genCpp.getAbsolutePath(), "-o", genExe.getAbsolutePath());
+                    pbGen.redirectErrorStream(true);
+                    pbGen.redirectOutput(genErrFile);
+                    Process pGen = pbGen.start();
+                    if (pGen.waitFor(15, TimeUnit.SECONDS) && pGen.exitValue() == 0) break;
+                    String errMsg = genErrFile.exists() ? Files.readString(genErrFile.toPath()) : "Lỗi không xác định";
+                    if (attempt < 3) {
+                        listener.onProgress(0, totalCases, "AI đang tự sửa lỗi Generator...");
+                        currentGenCode = aiService.fixCodeWithAI(currentGenCode, errMsg, problem, "generator");
+                    } else throw new Exception("Biên dịch Generator thất bại sau 3 lần thử! Lỗi: " + errMsg);
                 }
 
-                // 3. Biên dịch AC Code (C++)
-                listener.onProgress(0, totalCases, "Đang biên dịch Solution chuẩn (AC)...");
+                // 3. Biên dịch AC Code (Thử tối đa 3 lần với AI Self-Fix)
                 File acCpp = new File(tempDir.toFile(), "ac.cpp");
-                Files.writeString(acCpp.toPath(), cleanMarkdown(acCode));
                 File acExe = new File(tempDir.toFile(), "ac.exe");
-
-                ProcessBuilder pbAc = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), acCpp.getAbsolutePath(), "-o", acExe.getAbsolutePath());
-                Process pAc = pbAc.start();
-                if (!pAc.waitFor(15, TimeUnit.SECONDS) || pAc.exitValue() != 0) {
-                    throw new Exception("Biên dịch AC Code thất bại!");
+                String currentAcCode = acCode;
+                for (int attempt = 1; attempt <= 3; attempt++) {
+                    listener.onProgress(0, totalCases, "Biên dịch AC Code (Lần " + attempt + ")...");
+                    Files.writeString(acCpp.toPath(), cleanMarkdown(currentAcCode));
+                    File acErrFile = new File(tempDir.toFile(), "ac_err.txt");
+                    ProcessBuilder pbAc = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), acCpp.getAbsolutePath(), "-o", acExe.getAbsolutePath());
+                    pbAc.redirectErrorStream(true);
+                    pbAc.redirectOutput(acErrFile);
+                    Process pAc = pbAc.start();
+                    if (pAc.waitFor(15, TimeUnit.SECONDS) && pAc.exitValue() == 0) break;
+                    String errMsg = acErrFile.exists() ? Files.readString(acErrFile.toPath()) : "Lỗi không xác định";
+                    if (attempt < 3) {
+                        listener.onProgress(0, totalCases, "AI đang tự sửa lỗi AC Code...");
+                        currentAcCode = aiService.fixCodeWithAI(currentAcCode, errMsg, problem, "solution");
+                    } else throw new Exception("Biên dịch AC Code thất bại sau 3 lần thử! Lỗi: " + errMsg);
                 }
 
                 // 4. Vòng lặp Sinh Input & Lấy Output chuẩn
@@ -113,32 +129,30 @@ public class EvaluationController {
                     String seed = String.valueOf(System.currentTimeMillis() + i);
                     listener.onProgress(i, totalCases, "Đang sinh Testcase " + (i + 1) + "/" + totalCases + " (Mode: " + currentMode + ")");
                     
-                    // Chạy generator
+                    File genOutFile = new File(tempDir.toFile(), "gen_out.txt");
                     ProcessBuilder pbRunGen = new ProcessBuilder(genExe.getAbsolutePath(), seed, currentMode);
+                    pbRunGen.redirectOutput(genOutFile);
                     Process runGen = pbRunGen.start();
-                    String generatedInput = new String(runGen.getInputStream().readAllBytes());
-                    runGen.waitFor(5, TimeUnit.SECONDS);
+                    if (!runGen.waitFor(5, TimeUnit.SECONDS)) throw new Exception("Generator bị treo!");
+                    
+                    String generatedInput = Files.readString(genOutFile.toPath()).replace("\r", "");
+                    File cleanInFile = new File(tempDir.toFile(), "input_clean.txt");
+                    Files.writeString(cleanInFile.toPath(), generatedInput);
 
-                    // Đẩy input vào AC Code để lấy Output
+                    File acOutFile = new File(tempDir.toFile(), "ac_out.txt");
                     ProcessBuilder pbRunAc = new ProcessBuilder(acExe.getAbsolutePath());
+                    pbRunAc.redirectInput(cleanInFile);
+                    pbRunAc.redirectOutput(acOutFile);
                     Process runAc = pbRunAc.start();
-                    runAc.getOutputStream().write(generatedInput.getBytes());
-                    runAc.getOutputStream().flush();
-                    runAc.getOutputStream().close();
+                    if (!runAc.waitFor(5, TimeUnit.SECONDS)) throw new Exception("AC Code bị treo!");
                     
-                    String expectedOutput = new String(runAc.getInputStream().readAllBytes());
-                    runAc.waitFor(5, TimeUnit.SECONDS);
-
-                    // Add TestCase & Lưu DB
+                    String expectedOutput = Files.readString(acOutFile.toPath()).replace("\r", "");
                     TestCase tc = new TestCase(0, problemId, generatedInput, expectedOutput, false, currentMode);
-                    tcDAO.addTestCase(tc); // Lưu vào cơ sở dữ liệu
-                    
-                    // Vì DAO có thể không gán ID trực tiếp vào Object, ta cứ add vào List (Trong thực tế cần lấy lại ID tự tăng nếu EvaluationService dùng)
-                    // (Tuy nhiên EvaluationService chỉ duyệt mảng không phụ thuộc ID cứng)
+                    tcDAO.addTestCase(tc);
                     testCases.add(tc);
                 }
 
-                // Dọn dẹp thư mục tạm
+                // Dọn dẹp
                 for (File f : tempDir.toFile().listFiles()) f.delete();
                 Files.delete(tempDir);
 
@@ -149,35 +163,23 @@ public class EvaluationController {
                 sampleCodes.add(new SampleCode(problemId, cleanMarkdown(aiService.generateSampleCode(problem, "WA")), "cpp", "WA"));
                 sampleCodes.add(new SampleCode(problemId, cleanMarkdown(aiService.generateSampleCode(problem, "TLE")), "cpp", "TLE"));
 
-                // Lưu các Sample Code vừa sinh vào DB
                 dal.SampleCodeDAO sampleCodeDAO = new dal.SampleCodeDAO();
-                for (SampleCode sc : sampleCodes) {
-                    sampleCodeDAO.addSampleCode(sc);
-                }
+                for (SampleCode sc : sampleCodes) sampleCodeDAO.addSampleCode(sc);
 
-                // 6. Ném vào EvaluationTask để chạy Sandbox đánh giá sức mạnh
-                EvaluationTask task = new EvaluationTask(
-                    testCases, sampleCodes, checker, 1500L,
-                    new EvaluationTask.EvaluationListener() {
-                        @Override public void onProgress(int cur, int tot, String status) {
-                            listener.onProgress(cur, tot, "Đánh giá Sandbox: " + status);
-                        }
-                        @Override public void onComplete(EvaluationReport report) {
-                            listener.onComplete(report);
-                        }
-                        @Override public void onError(Exception e) {
-                            listener.onError(e);
-                        }
-                    });
+                EvaluationTask task = new EvaluationTask(testCases, sampleCodes, checker, 5000L, new EvaluationTask.EvaluationListener() {
+                    @Override public void onProgress(int cur, int tot, String status) { listener.onProgress(cur, tot, "Đánh giá Sandbox: " + status); }
+                    @Override public void onComplete(EvaluationReport report) { listener.onComplete(report); }
+                    @Override public void onError(Exception e) { listener.onError(e); }
+                });
                 task.run();
-
-            } catch (Exception e) {
-                listener.onError(e);
-            }
+            } catch (Exception e) { listener.onError(e); }
         }, "AutoPipelineThread").start();
     }
 
-    public void compileAndGenerateTestcases(String generatorCode, String acCode, Problem problem, int totalCases, EvaluationListener listener) {
+    /**
+     * Chạy luồng sinh Testcase từ giao diện Giáo viên (Bước 4)
+     */
+    public void compileAndGenerateTestcases(AIService aiService, String generatorCode, String acCode, Problem problem, int totalCases, EvaluationListener listener) {
         listener.onStart();
         new Thread(() -> {
             try {
@@ -194,236 +196,130 @@ public class EvaluationController {
                 File testlibSrc = new File("lib/testlib.h");
                 if (testlibSrc.exists()) {
                     Files.copy(testlibSrc.toPath(), tempDir.resolve("testlib.h"), StandardCopyOption.REPLACE_EXISTING);
-                } else {
-                    throw new Exception("Không tìm thấy file lib/testlib.h trong dự án!");
-                }
+                } else throw new Exception("Không tìm thấy file lib/testlib.h!");
 
-                listener.onProgress(0, totalCases, "Đang biên dịch Generator (C++)...");
+                // 1. Biên dịch Generator (Thử tối đa 3 lần với AI Self-Fix)
                 File genCpp = new File(tempDir.toFile(), "gen.cpp");
-                Files.writeString(genCpp.toPath(), cleanMarkdown(generatorCode));
                 File genExe = new File(tempDir.toFile(), "gen.exe");
-
-                ProcessBuilder pbGen = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), genCpp.getAbsolutePath(), "-o", genExe.getAbsolutePath());
-                Process pGen = pbGen.start();
-                if (!pGen.waitFor(15, TimeUnit.SECONDS) || pGen.exitValue() != 0) {
-                    throw new Exception("Biên dịch Generator thất bại! Lỗi: " + new String(pGen.getErrorStream().readAllBytes()));
+                String currentGenCode = generatorCode;
+                for (int attempt = 1; attempt <= 3; attempt++) {
+                    listener.onProgress(0, totalCases, "Biên dịch Generator (Lần " + attempt + ")...");
+                    Files.writeString(genCpp.toPath(), injectTestlib(cleanMarkdown(currentGenCode)));
+                    File genErrFile = new File(tempDir.toFile(), "gen_err.txt");
+                    ProcessBuilder pbGen = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), genCpp.getAbsolutePath(), "-o", genExe.getAbsolutePath());
+                    pbGen.redirectErrorStream(true);
+                    pbGen.redirectOutput(genErrFile);
+                    Process pGen = pbGen.start();
+                    if (pGen.waitFor(15, TimeUnit.SECONDS) && pGen.exitValue() == 0) break;
+                    String errMsg = genErrFile.exists() ? Files.readString(genErrFile.toPath()) : "Lỗi không xác định";
+                    if (attempt < 3) {
+                        listener.onProgress(0, totalCases, "AI đang tự sửa lỗi Generator...");
+                        currentGenCode = aiService.fixCodeWithAI(currentGenCode, errMsg, problem, "generator");
+                    } else throw new Exception("Biên dịch Generator thất bại sau 3 lần thử! Lỗi: " + errMsg);
                 }
 
-                listener.onProgress(0, totalCases, "Đang biên dịch chuẩn AC Code (C++)...");
+                // 2. Biên dịch AC Code (Thử tối đa 3 lần với AI Self-Fix)
                 File acCpp = new File(tempDir.toFile(), "ac.cpp");
-                Files.writeString(acCpp.toPath(), cleanMarkdown(acCode));
                 File acExe = new File(tempDir.toFile(), "ac.exe");
-
-                ProcessBuilder pbAc = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), acCpp.getAbsolutePath(), "-o", acExe.getAbsolutePath());
-                Process pAc = pbAc.start();
-                if (!pAc.waitFor(15, TimeUnit.SECONDS) || pAc.exitValue() != 0) {
-                    throw new Exception("Biên dịch AC Code thất bại! Lỗi: " + new String(pAc.getErrorStream().readAllBytes()));
+                String currentAcCode = acCode;
+                for (int attempt = 1; attempt <= 3; attempt++) {
+                    listener.onProgress(0, totalCases, "Biên dịch AC Code (Lần " + attempt + ")...");
+                    Files.writeString(acCpp.toPath(), cleanMarkdown(currentAcCode));
+                    File acErrFile = new File(tempDir.toFile(), "ac_err.txt");
+                    ProcessBuilder pbAc = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), acCpp.getAbsolutePath(), "-o", acExe.getAbsolutePath());
+                    pbAc.redirectErrorStream(true);
+                    pbAc.redirectOutput(acErrFile);
+                    Process pAc = pbAc.start();
+                    if (pAc.waitFor(15, TimeUnit.SECONDS) && pAc.exitValue() == 0) break;
+                    String errMsg = acErrFile.exists() ? Files.readString(acErrFile.toPath()) : "Lỗi không xác định";
+                    if (attempt < 3) {
+                        listener.onProgress(0, totalCases, "AI đang tự sửa lỗi AC Code...");
+                        currentAcCode = aiService.fixCodeWithAI(currentAcCode, errMsg, problem, "solution");
+                    } else throw new Exception("Biên dịch AC Code thất bại sau 3 lần thử! Lỗi: " + errMsg);
                 }
 
-                // Bảo đảm có tham chiếu Problem hợp lệ trong DB để không bị lỗi Khóa Ngoại (Foreign Key)
+                // Đảm bảo Problem có ID hợp lệ
                 dal.ProblemDAO problemDao = new dal.ProblemDAO();
-                java.util.List<entity.Problem> probs = problemDao.getAllProblems();
-                int safeProblemId = problem != null ? problem.getId() : 1;
-                
-                // Nếu chưa có, ta tự sinh Problem từ dữ liệu AI đã phân tích được
-                if (probs.isEmpty() || safeProblemId == 0) {
-                    entity.Problem dbProblem = new entity.Problem(0, 
-                        problem != null && problem.getTitle() != null ? problem.getTitle() : "Bài tập chưa phân loại (Auto Gen)", 
-                        problem != null && problem.getContent() != null ? problem.getContent() : "Được tạo tự động bởi Hệ thống AI", 
-                        problem != null ? problem.getTimeLimitMs() : 2000, 
-                        problem != null ? problem.getMemoryLimitMb() : 256, 
-                        "AI Sandbox"
-                    );
-                    problemDao.addProblem(dbProblem);
-                    probs = problemDao.getAllProblems();
-                    if (!probs.isEmpty()) {
-                        safeProblemId = probs.get(probs.size() - 1).getId();
-                        if (problem != null) {
-                            problem.setId(safeProblemId); // Cập nhật lại ID cho Frontend sử dụng khi lấy List<TestCase>
-                        }
-                    }
+                int safeProblemId = (problem != null && problem.getId() > 0) ? problem.getId() : 1;
+                if (problemDao.getProblemById(safeProblemId) == null) {
+                    entity.Problem dbP = new entity.Problem(0, "Bài tập AI", "Content", 2000, 256, "AI");
+                    problemDao.addProblem(dbP);
+                    safeProblemId = problemDao.getAllProblems().get(0).getId();
                 }
 
-                dal.TestCaseDAO dao = new dal.TestCaseDAO();
-                int successCount = 0;
-
+                pendingTestCases.clear();
                 for (int i = 0; i < totalCases; i++) {
-                    String currentMode = modeList.get(i);
-                    String seed = String.valueOf(System.currentTimeMillis() + i);
-                    listener.onProgress(i, totalCases, "Đang sinh Testcase " + (i + 1) + "/" + totalCases + " (Mode: " + currentMode + ")");
+                    String mode = modeList.get(i);
+                    listener.onProgress(i, totalCases, "Đang sinh Testcase " + (i + 1) + " (Mode: " + mode + ")");
+                    File genOut = new File(tempDir.toFile(), "gen_out.txt");
+                    new ProcessBuilder(genExe.getAbsolutePath(), String.valueOf(System.currentTimeMillis() + i), mode).redirectOutput(genOut).start().waitFor();
+                    String input = Files.readString(genOut.toPath()).replace("\r", "");
                     
-                    // 1. Chạy Generator (Ghi thẳng ra file để chống lag/deadlock buffer)
-                    File genOutFile = new File(tempDir.toFile(), "gen_out.txt");
-                    ProcessBuilder pbRunGen = new ProcessBuilder(genExe.getAbsolutePath(), seed, currentMode);
-                    pbRunGen.redirectOutput(genOutFile);
-                    Process runGen = pbRunGen.start();
-                    
-                    if (!runGen.waitFor(2, TimeUnit.SECONDS)) {  // Fast-fail sau 2s
-                        runGen.destroyForcibly();
-                        throw new Exception("Code Generator (Bước 2) bị treo hoặc chạy quá 2s! Vui lòng tự SỬA BẰNG TAY mã C++ trên màn hình thay vì gọi AI để đỡ tốn Quota.");
-                    }
-                    String generatedInput = Files.readString(genOutFile.toPath());
+                    File inClean = new File(tempDir.toFile(), "in_clean.txt");
+                    Files.writeString(inClean.toPath(), input);
+                    File acOut = new File(tempDir.toFile(), "ac_out.txt");
+                    new ProcessBuilder(acExe.getAbsolutePath()).redirectInput(inClean).redirectOutput(acOut).start().waitFor();
+                    String output = Files.readString(acOut.toPath()).replace("\r", "");
 
-                    // 2. Chạy AC Code để ra Output chuẩn
-                    File acOutFile = new File(tempDir.toFile(), "ac_out.txt");
-                    ProcessBuilder pbRunAc = new ProcessBuilder(acExe.getAbsolutePath());
-                    pbRunAc.redirectInput(genOutFile); // Đọc input trực tiếp từ file gen
-                    pbRunAc.redirectOutput(acOutFile); // Ghi output thẳng ra file
-                    Process runAc = pbRunAc.start();
-                    
-                    if (!runAc.waitFor(2, TimeUnit.SECONDS)) { // Fast-fail sau 2s
-                        runAc.destroyForcibly();
-                        throw new Exception("Code Mẫu AC (Bước 3) chạy quá giới hạn 2 giây (TLE)! Tự SỬA LẠI TAY thuật toán cho tối ưu hơn trên giao diện nhé.");
-                    }
-                    String expectedOutput = Files.readString(acOutFile.toPath());
-
-                    // Insert vào CSDL
-                    TestCase tc = new TestCase();
-                    tc.setProblemId(safeProblemId);
-                    tc.setInputData(generatedInput);
-                    tc.setExpectedOutput(expectedOutput);
-                    tc.setStrengthStatus(currentMode.toUpperCase()); // Ghi rõ: EDGE, MAX, RANDOM
-                    if(dao.addTestCase(tc)) {
-                        successCount++;
-                    }
+                    TestCase tc = new TestCase(0, safeProblemId, input, output, false, mode.toUpperCase());
+                    pendingTestCases.add(tc);
                 }
-
-                for (File f : tempDir.toFile().listFiles()) f.delete();
-                Files.delete(tempDir);
-
-                listener.onProgress(totalCases, totalCases, "Đã lưu " + successCount + "/" + totalCases + " Testcases vào Database.");
+                listener.onProgress(totalCases, totalCases, "Hoàn tất sinh " + totalCases + " testcases.");
                 listener.onComplete(null);
-
-            } catch (Exception e) {
-                listener.onError(e);
-            }
+            } catch (Exception e) { listener.onError(e); }
         }, "GenerateTestcasesThread").start();
     }
 
     private String cleanMarkdown(String code) {
         if (code == null) return "";
         code = code.trim();
-        // Remove markdown wrapper if it exists (e.g., ```cpp ... ```)
         if (code.startsWith("```")) {
-            // Find the end of the first line (e.g., ```cpp)
             int firstNewline = code.indexOf('\n');
-            if (firstNewline != -1) {
-                code = code.substring(firstNewline + 1);
-            }
-            // Remove the closing ``` if it exists at the end
-            if (code.endsWith("```")) {
-                code = code.substring(0, code.length() - 3);
-            }
+            if (firstNewline != -1) code = code.substring(firstNewline + 1);
+            if (code.endsWith("```")) code = code.substring(0, code.length() - 3);
         }
         return code.trim();
     }
 
-    /**
-     * Chạy bộ kiểm thử với mock data có sẵn.
-     * onStart() gọi đồng bộ trên luồng hiện tại (EDT).
-     * Các callback còn lại gọi từ background thread — View tự bọc SwingUtilities nếu cần.
-     */
+    private String injectTestlib(String code) {
+        if (code == null || code.contains("testlib.h")) return code;
+        String[] lines = code.split("\n");
+        int lastInc = -1;
+        for (int i = 0; i < lines.length; i++) if (lines[i].trim().startsWith("#include")) lastInc = i;
+        StringBuilder sb = new StringBuilder();
+        if (lastInc >= 0) {
+            for (int i = 0; i <= lastInc; i++) sb.append(lines[i]).append("\n");
+            sb.append("#include \"testlib.h\"\n");
+            for (int i = lastInc + 1; i < lines.length; i++) sb.append(lines[i]).append("\n");
+        } else sb.append("#include <bits/stdc++.h>\n#include \"testlib.h\"\n").append(code);
+        return sb.toString().trim();
+    }
+
     public void runEvaluation(Problem problem, String checkerCode, String acCode, String waCode, EvaluationListener listener) {
         listener.onStart();
+        List<TestCase> testCases = (pendingTestCases != null && !pendingTestCases.isEmpty()) ? new ArrayList<>(pendingTestCases) : new dal.TestCaseDAO().getTestCasesByProblemId(problem != null ? problem.getId() : 1);
+        if (testCases == null || testCases.isEmpty()) { listener.onError(new Exception("Chưa có Testcase!")); return; }
+        
+        List<SampleCode> sampleCodes = new ArrayList<>();
+        sampleCodes.add(new SampleCode(cleanMarkdown(acCode), "cpp", "AC"));
+        if (waCode != null && !waCode.isEmpty()) sampleCodes.add(new SampleCode(cleanMarkdown(waCode), "cpp", "WA"));
 
-        boolean usingReal = !isBlank(checkerCode) || !isBlank(acCode) || !isBlank(waCode);
-
-        // Lấy Testcase từ Database theo id của bài tập hiện tại (Problem)
-        dal.TestCaseDAO testCaseDAO = new dal.TestCaseDAO();
-        int problemId = problem != null ? problem.getId() : 1;
-        List<TestCase> testCases = testCaseDAO.getTestCasesByProblemId(problemId);
-
-        // Đảm bảo testCases không null
-        if (testCases == null) {
-            testCases = new ArrayList<>();
-        }
-
-        // SampleCode: dùng dữ liệu thực nếu có, ngược lại fallback mock
-        List<SampleCode> sampleCodes = buildSampleCodes(acCode, waCode, usingReal);
-
-        // Checker: dùng checker code thực nếu có, ngược lại null (so khớp chính xác)
-        Checker checker = buildChecker(checkerCode, usingReal);
-
-        EvaluationTask task = new EvaluationTask(
-            testCases, sampleCodes, checker, 1500L,
-            new EvaluationTask.EvaluationListener() {
-                @Override public void onProgress(int cur, int tot, String status) {
-                    listener.onProgress(cur, tot, status);
-                }
-                @Override public void onComplete(EvaluationReport report) {
-                    listener.onComplete(report);
-                }
-                @Override public void onError(Exception e) {
-                    listener.onError(e);
-                }
-            });
-
+        Checker checker = (checkerCode == null || checkerCode.isEmpty()) ? null : new Checker(cleanMarkdown(checkerCode), "cpp");
+        EvaluationTask task = new EvaluationTask(testCases, sampleCodes, checker, 5000L, new EvaluationTask.EvaluationListener() {
+            @Override public void onProgress(int cur, int tot, String status) { listener.onProgress(cur, tot, status); }
+            @Override public void onComplete(EvaluationReport report) { listener.onComplete(report); }
+            @Override public void onError(Exception e) { listener.onError(e); }
+        });
         new Thread(task, "EvaluationThread").start();
     }
 
-    // ── Private helpers ─────────────────────────────────────────────────────
-
-    private boolean isBlank(String s) {
-        return s == null || s.trim().isEmpty();
-    }
-
-    /** Trả về Checker thực nếu checkerCode hợp lệ, ngược lại null. */
-    private Checker buildChecker(String checkerCode, boolean usingReal) {
-        if (isBlank(checkerCode)) return null;
-        String lang = usingReal ? "cpp" : "java";
-        return new Checker(cleanMarkdown(checkerCode), lang);
-    }
-
-    /** Xây dựng danh sách SampleCode từ code thực hoặc mock. */
-    private List<SampleCode> buildSampleCodes(String acCode, String waCode, boolean usingReal) {
-        List<SampleCode> list = new ArrayList<>();
-        String lang = usingReal ? "cpp" : "java";
-
-        if (!isBlank(acCode)) {
-            list.add(new SampleCode(cleanMarkdown(acCode), lang, "AC"));
-        } else {
-            // Mock AC: nhân 2 đúng
-            list.add(new SampleCode(
-                "import java.util.Scanner;\n" +
-                "public class Main {\n" +
-                "    public static void main(String[] args) {\n" +
-                "        Scanner sc = new Scanner(System.in);\n" +
-                "        if (sc.hasNextInt()) System.out.println(sc.nextInt() * 2);\n" +
-                "    }\n" +
-                "}\n",
-                "java", "AC"));
-        }
-
-        if (!isBlank(waCode)) {
-            list.add(new SampleCode(cleanMarkdown(waCode), lang, "WA"));
-        } else {
-            // Mock WA: nhân 3 sai logic
-            list.add(new SampleCode(
-                "import java.util.Scanner;\n" +
-                "public class Main {\n" +
-                "    public static void main(String[] args) {\n" +
-                "        Scanner sc = new Scanner(System.in);\n" +
-                "        if (sc.hasNextInt()) System.out.println(sc.nextInt() * 3);\n" +
-                "    }\n" +
-                "}\n",
-                "java", "WA"));
-
-            // Mock TLE (chỉ thêm khi dùng toàn mock, không thêm khi có code thực)
-            list.add(new SampleCode(
-                "public class Main {\n" +
-                "    public static void main(String[] args) { while (true) {} }\n" +
-                "}\n",
-                "java", "TLE"));
-        }
-
-        return list;
-    }
-
-    /** Mock testcase chuẩn — sẽ mở rộng kết nối DB. */
-    private List<TestCase> buildMockTestCases() {
-        List<TestCase> list = new ArrayList<>();
-        list.add(new TestCase(1, 101, "5\n",  "10", false, "Normal"));
-        list.add(new TestCase(2, 101, "12\n", "24", false, "Normal"));
-        return list;
+    public boolean savePendingTestCasesToDB() {
+        if (pendingTestCases == null || pendingTestCases.isEmpty()) return false;
+        dal.TestCaseDAO dao = new dal.TestCaseDAO();
+        int pId = pendingTestCases.get(0).getProblemId();
+        dao.deleteTestCasesByProblemId(pId);
+        int ok = 0;
+        for (TestCase tc : pendingTestCases) if (dao.addTestCase(tc)) ok++;
+        return ok == pendingTestCases.size();
     }
 }

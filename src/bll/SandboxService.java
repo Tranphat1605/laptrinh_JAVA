@@ -3,7 +3,6 @@ package bll;
 import bll.executor.CodeExecutor;
 import bll.executor.CodeExecutorFactory;
 import entity.ExecutionResult;
-
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,13 +42,13 @@ public class SandboxService {
             Files.writeString(sourceFile.toPath(), checkerCode);
             
             File inFile = new File(tempFolder, "input.txt");
-            Files.writeString(inFile.toPath(), inputData != null ? inputData : "");
+            Files.writeString(inFile.toPath(), inputData != null ? inputData.replace("\r", "") : "");
             
             File actualFile = new File(tempFolder, "actual.txt");
-            Files.writeString(actualFile.toPath(), actualOutput != null ? actualOutput : "");
+            Files.writeString(actualFile.toPath(), actualOutput != null ? actualOutput.replace("\r", "") : "");
             
             File expectedFile = new File(tempFolder, "expected.txt");
-            Files.writeString(expectedFile.toPath(), expectedOutput != null ? expectedOutput : "");
+            Files.writeString(expectedFile.toPath(), expectedOutput != null ? expectedOutput.replace("\r", "") : "");
             
             boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
             File exeFile = new File(tempFolder, isWindows ? "checker.exe" : "checker");

@@ -66,4 +66,18 @@ public class TestCaseDAO {
         }
         return list;
     }
+
+    public boolean deleteTestCasesByProblemId(int problemId) {
+        String sql = "DELETE FROM TestCase WHERE problemId = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, problemId);
+            return pstmt.executeUpdate() > 0;
+            
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
 }

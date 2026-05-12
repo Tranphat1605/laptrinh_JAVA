@@ -1,7 +1,6 @@
 package bll;
 
 import entity.*;
-
 import java.util.List;
 
 public class EvaluationService {

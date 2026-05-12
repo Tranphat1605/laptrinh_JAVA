@@ -48,4 +48,27 @@ public class ProblemDAO {
         }
         return list;
     }
+
+    public Problem getProblemById(int id) {
+        String sql = "SELECT * FROM Problem WHERE id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, id);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return new Problem(
+                            rs.getInt("id"),
+                            rs.getString("title"),
+                            rs.getString("content"),
+                            rs.getInt("timeLimitMs"),
+                            rs.getInt("memoryLimitMb"),
+                            rs.getString("source")
+                    );
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
 }

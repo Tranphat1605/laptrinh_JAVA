@@ -1,7 +1,7 @@
 package gui;
 
-import javax.swing.*;
 import java.awt.*;
+import javax.swing.*;
 
 public class DashboardFrame extends JFrame {
 
@@ -34,9 +34,9 @@ public class DashboardFrame extends JFrame {
         add(btnPanel, BorderLayout.CENTER);
     }
 
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            new DashboardFrame().setVisible(true);
-        });
-    }
+    // public static void main(String[] args) {
+    //     SwingUtilities.invokeLater(() -> {
+    //         new DashboardFrame().setVisible(true);
+    //     });
+    // }
 }

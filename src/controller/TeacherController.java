@@ -36,6 +36,10 @@ public class TeacherController {
         this.aiService = new AIService(apiKey);
     }
 
+    public AIService getAiService() {
+        return aiService;
+    }
+
     /** Phân tích đề bài (text/ảnh). Callback gọi trên EDT. */
     public void analyzeProblem(String text, File imageFile, AnalysisListener listener) {
         SwingUtilities.invokeLater(listener::onStart);
