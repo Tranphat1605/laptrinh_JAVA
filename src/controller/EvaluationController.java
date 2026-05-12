@@ -173,7 +173,13 @@ public class EvaluationController {
                 for (int i = 0; i < maxCount; i++) modeList.add("max");
                 for (int i = 0; i < randomCount; i++) modeList.add("random");
 
-                Path tempDir = Files.createTempDirectory("testcase_gen_");
+                // Tạo thư mục lưu trữ testcase ngay trong dự án
+                File workspaceDir = new File("testcases_data/problem_" + problemId);
+                if (!workspaceDir.exists()) {
+                    workspaceDir.mkdirs();
+                }
+                Path tempDir = workspaceDir.toPath();
+
                 File testlibSrc = new File("lib/testlib.h");
                 if (testlibSrc.exists()) {
                     Files.copy(testlibSrc.toPath(), tempDir.resolve("testlib.h"), StandardCopyOption.REPLACE_EXISTING);
@@ -252,8 +258,10 @@ public class EvaluationController {
                     }
                 }
 
-                for (File f : tempDir.toFile().listFiles()) f.delete();
-                Files.delete(tempDir);
+                // Không xóa file đi nữa để người dùng có thể xem lại dữ liệu thô trên ổ cứng
+                // (Chỉ cân nhắc xóa file .exe để dọn dẹp)
+                new File(tempDir.toFile(), "gen.exe").delete();
+                new File(tempDir.toFile(), "ac.exe").delete();
 
                 listener.onProgress(totalCases, totalCases, "Đã lưu " + successCount + "/" + totalCases + " Testcases vào Database.");
                 listener.onComplete(null);
