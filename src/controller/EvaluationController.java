@@ -234,7 +234,6 @@ public class EvaluationController {
                         runGen.destroyForcibly();
                         throw new Exception("Quá thời gian sinh Testcase (5 phút). Có thể file quá lớn hoặc vòng lặp vô hạn!");
                     }
-                    String generatedInput = Files.readString(inputTxt.toPath());
 
                     ProcessBuilder pbRunAc = new ProcessBuilder(acExe.getAbsolutePath());
                     pbRunAc.redirectInput(inputTxt);
@@ -245,13 +244,12 @@ public class EvaluationController {
                         runAc.destroyForcibly();
                         throw new Exception("Quá thời gian thực thi mã chuẩn AC chạy Testcase (5 phút).");
                     }
-                    String expectedOutput = Files.readString(outputTxt.toPath());
 
-                    // Insert vào CSDL
+                    // LƯU ĐƯỜNG DẪN THAY VÌ LƯU CHUỖI NHIỀU GB VÀO SQL
                     TestCase tc = new TestCase();
                     tc.setProblemId(problemId);
-                    tc.setInputData(generatedInput);
-                    tc.setExpectedOutput(expectedOutput);
+                    tc.setInputData(inputTxt.getAbsolutePath());
+                    tc.setExpectedOutput(outputTxt.getAbsolutePath());
                     tc.setStrengthStatus("Normal");
                     if(dao.addTestCase(tc)) {
                         successCount++;

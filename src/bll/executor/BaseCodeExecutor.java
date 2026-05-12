@@ -26,25 +26,37 @@ public abstract class BaseCodeExecutor implements CodeExecutor {
 
         long startTimeNano = System.nanoTime();
         Process process = null;
-        StreamConsumer stdoutConsumer = null;
         StreamConsumer stderrConsumer = null;
+        File outputFile = null;
+        boolean isFilePathInput = false;
+
         try {
+            // Tối ưu I/O an toàn bộ nhớ: Gắn luồng vào từ File nếu input là đường dẫn hợp lệ
+            if (input != null && !input.trim().isEmpty()) {
+                File inFile = new File(input.trim());
+                if (inFile.exists() && inFile.isFile()) {
+                    pb.redirectInput(inFile);
+                    isFilePathInput = true;
+                }
+            }
+
+            // Sinh file tạm để chặn xả RAM (Chứa đầu ra của thí sinh)
+            outputFile = File.createTempFile("student_out_", ".txt");
+            pb.redirectOutput(outputFile);
+
             process = pb.start();
 
-            // Khởi động các luồng đọc bất đồng bộ ngay sau khi tiến trình bắt đầu
-            stdoutConsumer = new StreamConsumer(process.getInputStream());
+            // Chỉ cần đọc luồng báo lỗi
             stderrConsumer = new StreamConsumer(process.getErrorStream());
-            stdoutConsumer.start();
             stderrConsumer.start();
 
-            // Tác vụ A: Gửi dữ liệu đầu vào (input) vào tiến trình con nếu có
-            if (input != null && !input.isEmpty()) {
+            // Nếu Input là String thô (không phải file), thì ta mới đổ qua RAM -> Pipe
+            if (!isFilePathInput && input != null && !input.isEmpty()) {
                 try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()))) {
                     writer.write(input);
                     writer.flush();
                 }
             } else {
-                // Đóng luồng output để báo hiệu hết dữ liệu đầu vào
                 process.getOutputStream().close();
             }
 
@@ -53,16 +65,14 @@ public abstract class BaseCodeExecutor implements CodeExecutor {
             
             if (!finished) {
                 process.destroyForcibly();
-                stdoutConsumer.interrupt();
                 stderrConsumer.interrupt();
-                return new ExecutionResult("TLE", "", "Time Limit Exceeded (Watchdog)", timeLimitMs * 2);
+                return new ExecutionResult("TLE", outputFile.getAbsolutePath(), "Time Limit Exceeded (Watchdog)", timeLimitMs * 2);
             }
 
-            // Chờ các luồng đọc hoàn tất việc nhận dữ liệu
-            stdoutConsumer.join(1000);
             stderrConsumer.join(1000);
 
-            String output = stdoutConsumer.getResult();
+            // Truyền đường dẫn file thay vì nhồi chuỗi output
+            String output = outputFile.getAbsolutePath();
             String errorRaw = stderrConsumer.getResult();
             
             long executionTimeMs = 0;

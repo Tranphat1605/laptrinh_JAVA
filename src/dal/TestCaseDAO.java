@@ -9,14 +9,14 @@ import java.util.List;
 public class TestCaseDAO {
 
     public boolean addTestCase(TestCase tc) {
-        String sql = "INSERT INTO TestCase (problemId, inputData, expectedOutput, isHidden, strengthStatus) VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO TestCase (problemId, inputPath, outputPath, isHidden, strengthStatus) VALUES (?, ?, ?, ?, ?)";
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setInt(1, tc.getProblemId());
-            pstmt.setString(2, tc.getInputData());
+            pstmt.setString(2, tc.getInputData()); // get/set name vẫn giữ cũ để ít ảnh hưởng, nhưng lưu xuông cột Path mới
             pstmt.setString(3, tc.getExpectedOutput());
-            pstmt.setBoolean(4, tc.isHidden()); // JDBC tự map boolean sang kiểu BIT của SQL Server
+            pstmt.setBoolean(4, tc.isHidden());
             pstmt.setString(5, tc.getStrengthStatus());
 
             return pstmt.executeUpdate() > 0;
@@ -54,8 +54,8 @@ public class TestCaseDAO {
                 TestCase tc = new TestCase(
                         rs.getInt("id"),
                         rs.getInt("problemId"),
-                        rs.getString("inputData"),
-                        rs.getString("expectedOutput"),
+                        rs.getString("inputPath"), // Lấy từ cột Path
+                        rs.getString("outputPath"),
                         rs.getBoolean("isHidden"),
                         rs.getString("strengthStatus")
                 );

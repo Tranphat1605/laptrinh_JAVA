@@ -113,8 +113,8 @@ CREATE TABLE Problem (
 CREATE TABLE TestCase (
   id INT IDENTITY(1,1) PRIMARY KEY,
   problemId INT NOT NULL,
-  inputData NVARCHAR(MAX),
-  expectedOutput NVARCHAR(MAX),
+  inputPath NVARCHAR(512),
+  outputPath NVARCHAR(512),
   isHidden BIT DEFAULT 0,
   strengthStatus NVARCHAR(64),
   CONSTRAINT FK_TestCase_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE

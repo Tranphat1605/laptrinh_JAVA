@@ -2,6 +2,7 @@ package bll;
 
 import entity.*;
 
+import java.io.File;
 import java.util.List;
 
 public class EvaluationService {
@@ -101,18 +102,51 @@ public class EvaluationService {
             return execResult.getStatus(); // Trả luôn TLE, RTE, CE
         }
 
-        String actual = execResult.getOutput();
-        if (actual == null) actual = "";
+        String actualOutPath = execResult.getOutput();
+        if (actualOutPath == null) actualOutPath = "";
         if (expectedOutput == null) expectedOutput = "";
 
-        // Chuẩn hóa chuỗi trước khi so sánh (Cắt khoảng trắng thừa ở đuôi và enter dư)
-        String normalizedActual = normalizeString(actual);
+        // Kiểm tra xem đây có phải là so khớp file không (Cơ chế an toàn RAM)
+        File actualFile = new File(actualOutPath.trim());
+        File expectedFile = new File(expectedOutput.trim());
+
+        if (actualFile.exists() && actualFile.isFile() && expectedFile.exists() && expectedFile.isFile()) {
+            return compareFiles(actualFile, expectedFile) ? "AC" : "WA";
+        }
+
+        // Tương thích ngược với Mock Array (chuỗi text thô)
+        String normalizedActual = normalizeString(actualOutPath); // Lúc này actualOutPath chứa txt raw
         String normalizedExpected = normalizeString(expectedOutput);
 
         if (normalizedActual.equals(normalizedExpected)) {
-            return "AC"; // Accepted
+            return "AC";
         } else {
-            return "WA"; // Wrong Answer
+            return "WA";
+        }
+    }
+
+    /**
+     * Thuật toán so khớp File theo từng dòng cục bộ, không nạp toàn bộ vào RAM
+     */
+    private boolean compareFiles(File f1, File f2) {
+        try (java.io.BufferedReader r1 = java.nio.file.Files.newBufferedReader(f1.toPath());
+             java.io.BufferedReader r2 = java.nio.file.Files.newBufferedReader(f2.toPath())) {
+            
+            String line1, line2;
+            while ((line1 = r1.readLine()) != null) {
+                line2 = r2.readLine();
+                if (line1.trim().isEmpty() && (line2 == null || line2.trim().isEmpty())) continue;
+                if (line2 == null || !line1.trim().equals(line2.trim())) {
+                    return false;
+                }
+            }
+            // Kiểm tra xem f2 còn dòng nào chứa ký tự ẩn không
+            while ((line2 = r2.readLine()) != null) {
+                if (!line2.trim().isEmpty()) return false;
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 
