@@ -77,9 +77,12 @@ public class EvaluationController {
                 File genExe = new File(tempDir.toFile(), "gen.exe");
 
                 ProcessBuilder pbGen = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), genCpp.getAbsolutePath(), "-o", genExe.getAbsolutePath());
+                pbGen.redirectErrorStream(true);
                 Process pGen = pbGen.start();
                 if (!pGen.waitFor(15, TimeUnit.SECONDS) || pGen.exitValue() != 0) {
-                    throw new Exception("Biên dịch Generator thất bại! Vui lòng kiểm tra lại code AI sinh ra.");
+                    String err = new String(pGen.getInputStream().readAllBytes());
+                    if (pGen.isAlive()) pGen.destroyForcibly();
+                    throw new Exception("Biên dịch Generator thất bại! Vui lòng kiểm tra lại code AI sinh ra. Output: " + err);
                 }
 
                 // 3. Biên dịch AC Code (C++)
@@ -89,9 +92,12 @@ public class EvaluationController {
                 File acExe = new File(tempDir.toFile(), "ac.exe");
 
                 ProcessBuilder pbAc = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), acCpp.getAbsolutePath(), "-o", acExe.getAbsolutePath());
+                pbAc.redirectErrorStream(true);
                 Process pAc = pbAc.start();
                 if (!pAc.waitFor(15, TimeUnit.SECONDS) || pAc.exitValue() != 0) {
-                    throw new Exception("Biên dịch AC Code thất bại!");
+                    String err = new String(pAc.getInputStream().readAllBytes());
+                    if (pAc.isAlive()) pAc.destroyForcibly();
+                    throw new Exception("Biên dịch AC Code thất bại! Output: " + err);
                 }
 
                 // 4. Vòng lặp Sinh Input & Lấy Output chuẩn
@@ -181,9 +187,12 @@ public class EvaluationController {
                 File genExe = new File(tempDir.toFile(), "gen.exe");
 
                 ProcessBuilder pbGen = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), genCpp.getAbsolutePath(), "-o", genExe.getAbsolutePath());
+                pbGen.redirectErrorStream(true);
                 Process pGen = pbGen.start();
                 if (!pGen.waitFor(15, TimeUnit.SECONDS) || pGen.exitValue() != 0) {
-                    throw new Exception("Biên dịch Generator thất bại! Lỗi: " + new String(pGen.getErrorStream().readAllBytes()));
+                    String err = new String(pGen.getInputStream().readAllBytes());
+                    if (pGen.isAlive()) pGen.destroyForcibly();
+                    throw new Exception("Biên dịch Generator thất bại! Exit: " + (pGen.isAlive() ? "TIMEOUT" : pGen.exitValue()) + " Lỗi: " + err);
                 }
 
                 listener.onProgress(0, totalCases, "Đang biên dịch chuẩn AC Code (C++)...");
@@ -192,9 +201,12 @@ public class EvaluationController {
                 File acExe = new File(tempDir.toFile(), "ac.exe");
 
                 ProcessBuilder pbAc = new ProcessBuilder("g++", "-O2", "-std=c++17", "-I", tempDir.toAbsolutePath().toString(), acCpp.getAbsolutePath(), "-o", acExe.getAbsolutePath());
+                pbAc.redirectErrorStream(true);
                 Process pAc = pbAc.start();
                 if (!pAc.waitFor(15, TimeUnit.SECONDS) || pAc.exitValue() != 0) {
-                    throw new Exception("Biên dịch AC Code thất bại! Lỗi: " + new String(pAc.getErrorStream().readAllBytes()));
+                    String err = new String(pAc.getInputStream().readAllBytes());
+                    if (pAc.isAlive()) pAc.destroyForcibly();
+                    throw new Exception("Biên dịch AC Code thất bại! Exit: " + (pAc.isAlive() ? "TIMEOUT" : pAc.exitValue()) + " Lỗi: " + err);
                 }
 
                 dal.TestCaseDAO dao = new dal.TestCaseDAO();
@@ -245,16 +257,13 @@ public class EvaluationController {
     private String cleanMarkdown(String code) {
         if (code == null) return "";
         code = code.trim();
-        // Remove markdown wrapper if it exists (e.g., ```cpp ... ```)
-        if (code.startsWith("```")) {
-            // Find the end of the first line (e.g., ```cpp)
-            int firstNewline = code.indexOf('\n');
-            if (firstNewline != -1) {
-                code = code.substring(firstNewline + 1);
-            }
-            // Remove the closing ``` if it exists at the end
-            if (code.endsWith("```")) {
-                code = code.substring(0, code.length() - 3);
+        // Regex để loại bỏ tất cả text bên ngoài block code ```cpp ... ```
+        if (code.contains("```")) {
+            int startCode = code.indexOf("```");
+            int firstNewline = code.indexOf('\n', startCode);
+            int endCode = code.lastIndexOf("```");
+            if (firstNewline != -1 && endCode > firstNewline) {
+                return code.substring(firstNewline + 1, endCode).trim();
             }
         }
         return code.trim();
