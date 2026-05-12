@@ -49,9 +49,13 @@ public class AIService {
      */
     public Problem analyzeProblem(String text, File imageFile) throws Exception {
         String prompt = "Bạn là một AI chuyên gia về lập trình thi đấu (IOI, ICPC). " +
-                "Hãy phân tích đề bài sau và trích xuất các thông tin: Tên bài, " +
-                "Mô tả yêu cầu, Giới hạn đầu vào (Constraints), Định dạng Input, Định dạng Output. " +
-                "Trả về dưới dạng JSON.";
+                "Hãy phân tích đề bài sau và trích xuất các thông tin dưới định dạng JSON.\n" +
+                "Yêu cầu các trường JSON bắt buộc:\n" +
+                "1. \"title\": Tên bài (nếu không có trong đề, hãy tự đặt ngắn gọn).\n" +
+                "2. \"timeLimitMs\": Giới hạn thời gian tính bằng số milliseconds (Ví dụ 1 giây = 1000). Nếu không tìm thấy, trả về 1000.\n" +
+                "3. \"memoryLimitMb\": Giới hạn bộ nhớ tính bằng số Megabytes. Nếu không tìm thấy, trả về 256.\n" +
+                "4. \"content\": Gom chung TẤT CẢ các phần: Mô tả yêu cầu, Giới hạn đầu vào (Constraints), Định dạng Input, Định dạng Output vào thành một đoạn văn bản tóm tắt mạch lạc.\n" +
+                "Chỉ trả về NGAY khối JSON hợp lệ, KHÔNG VIẾT GÌ THÊM (no markdown, no extra text).";
 
         String imageBase64 = null;
         if (imageFile != null && imageFile.exists()) {
@@ -64,7 +68,18 @@ public class AIService {
         String responseMessage = sendRequestWithRetry(payload);
 
         Problem p = new Problem();
-        p.setContent(responseMessage);
+        try {
+            JsonObject jsonOutput = this.gson.fromJson(responseMessage, JsonObject.class);
+            if (jsonOutput.has("title")) p.setTitle(jsonOutput.get("title").getAsString());
+            if (jsonOutput.has("timeLimitMs")) p.setTimeLimitMs(jsonOutput.get("timeLimitMs").getAsInt());
+            if (jsonOutput.has("memoryLimitMb")) p.setMemoryLimitMb(jsonOutput.get("memoryLimitMb").getAsInt());
+            if (jsonOutput.has("content")) p.setContent(jsonOutput.get("content").getAsString());
+        } catch (Exception e) {
+            System.err.println("AI không trả về JSON hợp lệ: " + e.getMessage());
+            p.setContent(responseMessage);
+            p.setTimeLimitMs(1000);
+            p.setMemoryLimitMb(256);
+        }
         return p;
     }
 
@@ -80,14 +95,16 @@ public class AIService {
                 "=== YÊU CẦU ===\n" +
                 "Viết code C++ generator sử dụng testlib.h để tự động sinh dữ liệu input cho bài toán trên.\n" +
                 "Bắt buộc:\n" +
-                "1. Dòng đầu tiên trong main: registerGen(argc, argv, 1);\n" +
-                "2. Hỗ trợ seed từ argv[1].\n" +
-                "3. In ra đúng định dạng Input mà đề bài yêu cầu, không in text thừa.\n" +
-                "4. CHÚ Ý QUAN TRỌNG VỀ ĐỘ MẠNH (STRONG TESTCASES):\n" +
+                "1. BẮT BUỘC #include <bits/stdc++.h> hoặc đầy đủ các thư viện C++ cần thiết (<iostream>, <cmath>, <vector>, v.v.) trước khi #include \"testlib.h\" để không bị lỗi Missing Declaration khi biên dịch.\n" +
+                "2. Dòng đầu tiên trong main: registerGen(argc, argv, 1);\n" +
+                "3. Hỗ trợ seed từ argv[1].\n" +
+                "4. In ra đúng định dạng Input mà đề bài yêu cầu, không in text thừa.\n" +
+                "5. CHÚ Ý QUAN TRỌNG VỀ ĐỘ MẠNH (STRONG TESTCASES):\n" +
                 "   - Generator cần lấy arg từ argv[2] (nếu truyền vào) làm tham số để quyết định mode sinh testcase.\n" +
                 "   - Nếu mode là 'edge': hãy sinh các trường hợp biên, giá trị tối thiểu, tối đa (VD: N=0, N=1, mảng rỗng, mảng gồm các phần tử bằng nhau hoặc âm hoàn toàn).\n" +
                 "   - Nếu mode là 'max': phải sinh Input sao cho N hoặc giá trị đạt sát Tối Đa của ràng buộc đề bài (áp lực cao để tạo TLE/MLE).\n" +
                 "   - Nếu mode là 'random' hoặc không có mode, sinh Random ngẫu nhiên.\n" +
+                "   - TUYỆT ĐỐI KHÔNG sử dụng hàm quit() với 1 tham số (vd: quit(\"lỗi\")). Nếu cần báo lỗi hãy dùng quitf(_fail, \"Lỗi...\");\n" +
                 "\nChỉ trả về code C++, không markdown.";
         String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
         return sendRequestWithRetry(payload);
@@ -103,10 +120,13 @@ public class AIService {
                 "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
                 "=== YÊU CẦU ===\n" +
                 "Viết code C++ checker sử dụng testlib.h cho bài toán trên.\n" +
-                "- Đọc input từ: inf\n" +
-                "- Đọc đáp án chuẩn từ: ans\n" +
-                "- Đọc output của thí sinh từ: ouf\n" +
-                "- Gọi quitf(_ok, ...) hoặc quitf(_wa, ...) tùy thuộc kết quả.\n" +
+                "- BẮT BUỘC #include <bits/stdc++.h> hoặc đầy đủ các thư viện C++ cần thiết (<iostream>, <cmath>, <vector>, v.v.) trước khi #include \"testlib.h\" để không bị lỗi Missing Declaration khi biên dịch.\n" +
+                "- Dòng đầu tiên trong main BẮT BUỘC phải là: registerTestlibCmd(argc, argv);\n" +
+                "- BẮT BUỘC sử dụng: inf.read... để đọc input.\n" +
+                "- BẮT BUỘC sử dụng: ans.read... để đọc đáp án chuẩn.\n" +
+                "- BẮT BUỘC sử dụng: ouf.read... để đọc output của thí sinh.\n" +
+                "- TUYỆT ĐỐI KHÔNG SỬ DỤNG std::cin hay std::cout hay scanf/printf.\n" +
+                "- Gọi quitf(_ok, ...) nếu đúng, hoặc quitf(_wa, ...) nếu sai.\n" +
                 "Chỉ trả về code C++, không markdown.";
         String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
         return sendRequestWithRetry(payload);
@@ -133,6 +153,7 @@ public class AIService {
                 "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
                 "=== YÊU CẦU ĐỐI VỚI LOẠI CODE " + type + " ===\n" +
                 constraintInstructions + 
+                "- BẮT BUỘC #include đầy đủ các thư viện C++ cần thiết (như <iostream>, <cmath>, <vector>, <algorithm>, v.v.) hoặc dùng <bits/stdc++.h> để không bị lỗi Missing Declaration khi biên dịch.\n" +
                 "\nChỉ trả về mã C++ thuần túy, không format markdown, không giải thích dòng nào cả.";
 
         String payload = buildTextPayload(TEXT_MODEL, prompt);
@@ -140,7 +161,7 @@ public class AIService {
     }
 
     /**
-     * Gửi request tới Groq API kèm cơ chế Retry
+     * Gửi request tới Groq API kèm cơ chế Retry + xử lý 429 Rate Limit
      */
     private String sendRequestWithRetry(String jsonPayload) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
@@ -155,10 +176,10 @@ public class AIService {
         while (attempts < MAX_RETRIES) {
             try {
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                int status = response.statusCode();
                 JsonObject jsonResponse = gson.fromJson(response.body(), JsonObject.class);
 
-                if (response.statusCode() == 200) {
-                    // Groq/OpenAI format: choices[0].message.content
+                if (status == 200) {
                     if (jsonResponse.has("choices")) {
                         JsonArray choices = jsonResponse.getAsJsonArray("choices");
                         if (choices.size() > 0) {
@@ -170,16 +191,30 @@ public class AIService {
                         }
                     }
                     throw new Exception("API trả về thành công nhưng không tìm thấy nội dung.");
+
+                } else if (status == 429) {
+                    // Rate Limit: đợi rồi thử lại
+                    long waitSecs = 60; // mặc định 60s
+                    // Cố gắng đọc Retry-After header nếu có
+                    response.headers().firstValue("retry-after")
+                            .ifPresent(v -> { /* không thể assign lại, dùng giá trị mặc định */ });
+                    attempts++;
+                    if (attempts >= MAX_RETRIES) {
+                        throw new Exception("⚠ Groq API đang bị giới hạn Token/phút (429 Rate Limit).\n"
+                            + "Vui lòng đợi 1-2 phút rồi thử lại, hoặc rút ngắn đề bài.");
+                    }
+                    System.err.println("[429 Rate Limit] Đợi " + waitSecs + "s trước khi thử lại (lần " + attempts + "/" + MAX_RETRIES + ")");
+                    Thread.sleep(waitSecs * 1000L);
+
                 } else {
-                    System.err.println("Lỗi kết nối AI API " + response.statusCode() + ": " + response.body());
-                    // Groq trả lỗi dạng: { "error": { "message": "..." } }
+                    System.err.println("Lỗi kết nối AI API " + status + ": " + response.body());
                     if (jsonResponse != null && jsonResponse.has("error")) {
                         String errorMsg = jsonResponse.getAsJsonObject("error").get("message").getAsString();
-                        throw new Exception("Lỗi kết nối AI API: " + errorMsg);
+                        throw new Exception("Lỗi AI API " + status + ": " + errorMsg);
                     }
+                    attempts++;
+                    Thread.sleep(2000L * attempts);
                 }
-                attempts++;
-                Thread.sleep(2000L * attempts); // Backoff
             } catch (IOException | InterruptedException e) {
                 attempts++;
                 if (attempts == MAX_RETRIES) {
@@ -199,11 +234,11 @@ public class AIService {
         if (text == null) return "";
         // Xóa code fence ``` với hoặc không có ngôn ngữ (```json, ```cpp, ```)
         text = text.replaceAll("(?s)```[a-zA-Z]*\\n", "").replaceAll("```", "");
-        // Xóa header markdown (### Bài A:  →  Bài A:)
-        text = text.replaceAll("(?m)^#{1,6}\\s*", "");
-        // Xóa bold/italic markdown (**text**, *text*, __text__)
-        text = text.replaceAll("\\*{1,2}([^*]+)\\*{1,2}", "$1");
-        text = text.replaceAll("_{1,2}([^_]+)_{1,2}", "$1");
+        // Xóa header markdown (### Bài A:  →  Bài A:) nhưng chừa lại dấu # của #include
+        text = text.replaceAll("(?m)^#{1,6}\\s+(?!include)", "");
+        // Xóa bold/italic markdown (**text**, *text*, __text__) (Nhưng bảo vệ các dấu underscore trong C++ như std::mt19937_64)
+        text = text.replaceAll("(?<![a-zA-Z0-9])\\*{1,2}([^*]+)\\*{1,2}(?![a-zA-Z0-9])", "$1");
+        text = text.replaceAll("(?<![a-zA-Z0-9])_{1,2}([^_]+)_{1,2}(?![a-zA-Z0-9])", "$1");
         return text.trim();
     }
 
@@ -252,7 +287,7 @@ public class AIService {
         payload.add("messages", messages);
 
         // Giới hạn output để tránh vượt quota token
-        payload.addProperty("max_tokens", 4096);
+        payload.addProperty("max_tokens", 2048);
 
         return gson.toJson(payload);
     }
@@ -280,7 +315,7 @@ public class AIService {
         messages.add(userMsg);
 
         payload.add("messages", messages);
-        payload.addProperty("max_tokens", 4096);
+        payload.addProperty("max_tokens", 2048);
 
         return gson.toJson(payload);
     }
