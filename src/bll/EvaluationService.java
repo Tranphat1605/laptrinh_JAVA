@@ -22,6 +22,16 @@ public class EvaluationService {
     public EvaluationReport evaluateTestCases(List<TestCase> testCases, List<SampleCode> sampleCodes, Checker checker, long timeLimitMs) {
         EvaluationReport report = new EvaluationReport();
 
+        String checkerExePath = null;
+        if (checker != null) {
+            ExecutionResult compileResult = sandboxService.compileChecker(checker.getCode());
+            if (!compileResult.getStatus().equals("SUCCESS")) {
+                report.addWarning("Biên dịch Custom Checker thất bại: " + compileResult.getError());
+                return report;
+            }
+            checkerExePath = compileResult.getOutput(); // The output contains the path to the executable
+        }
+
         for (int i = 0; i < sampleCodes.size(); i++) {
             SampleCode sample = sampleCodes.get(i);
             int passedCount = 0;
@@ -41,39 +51,55 @@ public class EvaluationService {
                     continue;
                 }
 
-                for (TestCase tc : testCases) {
-                    // Chạy code mẫu qua từng testcase
-                    ExecutionResult execResult = executor.runCode(tempDir, tc.getInputData(), timeLimitMs);
-                    
-                    String actualVerdict;
-                    if (checker != null) {
-                        // Nếu bài toán có cung cấp custom checker
-                        actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checker);
-                    } else {
-                        // So khớp chính xác mặc định
-                        actualVerdict = getVerdict(execResult, tc.getExpectedOutput());
-                    }
-                    
-                    if (actualVerdict.equals("AC")) {
-                        passedCount++;
-                    } else if (actualVerdict.equals("TLE")) {
-                        hasTLE = true;
-                    }
+                java.util.concurrent.atomic.AtomicInteger atomicPassedCount = new java.util.concurrent.atomic.AtomicInteger();
+                java.util.concurrent.atomic.AtomicBoolean atomicHasTLE = new java.util.concurrent.atomic.AtomicBoolean();
+                final int currentSampleIndex = i;
+                final String finalCheckerExePath = checkerExePath;
 
-                    // Cập nhật độ mạnh của Test Case 
-                    // Testcase nào bắt được code cố tình sai (WA) hoặc code chậm (TLE) sẽ được đánh giá là Testcase chất lượng (Strong)
-                    if (expected.equals("WA") && actualVerdict.equals("WA")) {
-                        tc.setStrengthStatus("Strong");
-                    } else if (expected.equals("TLE") && actualVerdict.equals("TLE")) {
-                        tc.setStrengthStatus("Strong");
-                    } else if (tc.getStrengthStatus() == null || tc.getStrengthStatus().isEmpty()) {
-                        tc.setStrengthStatus("Normal");
-                    }
+                testCases.parallelStream().forEach(tc -> {
+                    int sampleIndex = currentSampleIndex;
+                    try {
+                        // Chạy code mẫu qua từng testcase
+                        ExecutionResult execResult = executor.runCode(tempDir, tc.getInputData(), timeLimitMs);
+                        
+                        String actualVerdict;
+                        if (finalCheckerExePath != null) {
+                            // Nếu bài toán có cung cấp custom checker
+                            actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), finalCheckerExePath);
+                        } else {
+                            // So khớp chính xác mặc định
+                            actualVerdict = getVerdict(execResult, tc.getExpectedOutput());
+                        }
+                        
+                        if (actualVerdict.equals("AC")) {
+                            atomicPassedCount.incrementAndGet();
+                        } else if (actualVerdict.equals("TLE")) {
+                            atomicHasTLE.set(true);
+                        }
 
-                    // Ghi nhận chi tiết
-                    EvaluationResult tcResult = new EvaluationResult(0, i, tc.getId(), actualVerdict, execResult.getOutput(), execResult.getExecutionTime());
-                    report.addResult(tcResult);
-                }
+                        // Cập nhật độ mạnh của Test Case 
+                        synchronized(tc) {
+                            if (expected.equals("WA") && actualVerdict.equals("WA")) {
+                                tc.setStrengthStatus("Strong");
+                            } else if (expected.equals("TLE") && actualVerdict.equals("TLE")) {
+                                tc.setStrengthStatus("Strong");
+                            } else if (tc.getStrengthStatus() == null || tc.getStrengthStatus().isEmpty()) {
+                                tc.setStrengthStatus("Normal");
+                            }
+                        }
+
+                        // Ghi nhận chi tiết
+                        EvaluationResult tcResult = new EvaluationResult(0, sampleIndex, tc.getId(), actualVerdict, execResult.getOutput(), execResult.getExecutionTime());
+                        synchronized(report) {
+                            report.addResult(tcResult);
+                        }
+                    } catch (Exception ex) {
+                        // ignore ex
+                    }
+                });
+
+                passedCount = atomicPassedCount.get();
+                hasTLE = atomicHasTLE.get();
 
                 // Xóa file tạm sau khi chấm hết các TC
                 try {
@@ -132,6 +158,15 @@ public class EvaluationService {
                 return new ExecutionResult("CE", "", compileResult.getError(), 0, compileResult.getExitCode());
             }
 
+            String checkerExePath = null;
+            if (checker != null) {
+                ExecutionResult checkerCompileResult = sandboxService.compileChecker(checker.getCode());
+                if (!checkerCompileResult.getStatus().equals("SUCCESS")) {
+                    return new ExecutionResult("CE", "", "Lỗi biên dịch Custom Checker: " + checkerCompileResult.getError(), 0, checkerCompileResult.getExitCode());
+                }
+                checkerExePath = checkerCompileResult.getOutput();
+            }
+
             long maxTime = 0;
             int passedCount = 0;
 
@@ -141,8 +176,8 @@ public class EvaluationService {
                 maxTime = Math.max(maxTime, execResult.getExecutionTime());
                 
                 String actualVerdict;
-                if (checker != null) {
-                    actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checker);
+                if (checkerExePath != null) {
+                    actualVerdict = getVerdictByChecker(execResult, tc.getInputData(), tc.getExpectedOutput(), checkerExePath);
                 } else {
                     actualVerdict = getVerdict(execResult, tc.getExpectedOutput());
                 }
@@ -193,7 +228,7 @@ public class EvaluationService {
     /**
      * Hàm chấm dùng Custom Checker thay vì so khớp chính xác
      */
-    private String getVerdictByChecker(ExecutionResult execResult, String inputData, String expectedOutput, Checker checker) {
+    private String getVerdictByChecker(ExecutionResult execResult, String inputData, String expectedOutput, String checkerExePath) {
         if (!execResult.getStatus().equals("SUCCESS")) {
             return execResult.getStatus(); // Trả luôn TLE, RTE, CE của code mẫu
         }
@@ -201,7 +236,7 @@ public class EvaluationService {
         String actual = execResult.getOutput();
         
         ExecutionResult checkerResult = sandboxService.executeChecker(
-                checker.getCode(),
+                checkerExePath,
                 inputData,
                 expectedOutput,
                 actual,
@@ -223,8 +258,7 @@ public class EvaluationService {
         } else if (checkerResult.getExitCode() == 2) {
             return "PE"; // Có thể nhóm chung vào WA hoặc để PE
         } else {
-            System.err.println("Checker thất bại hoặc lỗi nghiêm trọng: " + checkerResult.getError());
-            return "CHECKER_ERROR";
+            return "CHECKER_ERROR " + checkerResult.getExitCode() + ":" + checkerResult.getError() + " | actual: " + actual;
         }
     }
 

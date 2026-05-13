@@ -26,7 +26,7 @@ public class TeacherController {
 
     public interface SampleCodeListener {
         void onStart();
-        void onComplete(String acCode, String waCode);
+        void onComplete(String acCode, String waCode, String tleCode);
         void onError(String message);
     }
 
@@ -63,14 +63,15 @@ public class TeacherController {
         }).start();
     }
 
-    /** Sinh code mẫu AC và WA. */
+    /** Sinh code mẫu AC, WA và TLE. */
     public void generateSampleCodes(Problem problem, SampleCodeListener listener) {
         SwingUtilities.invokeLater(listener::onStart);
         new Thread(() -> {
             try {
                 String ac = aiService.generateSampleCode(problem, "AC");
                 String wa = aiService.generateSampleCode(problem, "WA");
-                SwingUtilities.invokeLater(() -> listener.onComplete(ac, wa));
+                String tle = aiService.generateSampleCode(problem, "TLE");
+                SwingUtilities.invokeLater(() -> listener.onComplete(ac, wa, tle));
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> listener.onError(e.getMessage()));
             }

@@ -17,7 +17,7 @@ public class CppExecutor extends BaseCodeExecutor {
 
         // Biên dịch với cờ tối ưu hóa -O2 và chuẩn C++17
         ProcessBuilder compilePb = new ProcessBuilder("g++", "-O2", "-std=c++17", sourceFile.getAbsolutePath(), "-o", exeFile.getAbsolutePath());
-        ExecutionResult compileResult = runProcess(compilePb, "", 15000, false); // Tăng thời gian biên dịch C++ và không đo CPU
+        ExecutionResult compileResult = runProcess(compilePb, "", 45000, false); // Tăng thời gian biên dịch C++ lên 45s để tránh Timeout (nhất là khi dùng testlib.h)
         
         if (!exeFile.exists() || !compileResult.getStatus().equals("SUCCESS")) {
             return new ExecutionResult("CE", "", compileResult.getError(), 0, compileResult.getExitCode());

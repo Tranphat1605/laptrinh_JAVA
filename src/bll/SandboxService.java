@@ -30,32 +30,19 @@ public class SandboxService {
     }
 
     /**
-     * Chạy custom checker (testlib.h) bằng cách truyền đối số từ file chứ không đọc từ stdin chung
-     * Lệnh: ./checker input.txt actual_out.txt expected_out.txt
+     * Biên dịch custom checker 1 lần duy nhất
      */
-    public ExecutionResult executeChecker(String checkerCode, String inputData, String expectedOutput, String actualOutput, long timeLimitMs) {
+    public ExecutionResult compileChecker(String checkerCode) {
         try {
-            Path tempDir = Files.createTempDirectory("checker_sandbox");
+            Path tempDir = Files.createTempDirectory("checker_compile");
             File tempFolder = tempDir.toFile();
             
-            // 1. Ghi các file cần thiết
             File sourceFile = new File(tempFolder, "checker.cpp");
             Files.writeString(sourceFile.toPath(), checkerCode);
-            
-            File inFile = new File(tempFolder, "input.txt");
-            Files.writeString(inFile.toPath(), inputData != null ? inputData : "");
-            
-            File actualFile = new File(tempFolder, "actual.txt");
-            Files.writeString(actualFile.toPath(), actualOutput != null ? actualOutput : "");
-            
-            File expectedFile = new File(tempFolder, "expected.txt");
-            Files.writeString(expectedFile.toPath(), expectedOutput != null ? expectedOutput : "");
             
             boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
             File exeFile = new File(tempFolder, isWindows ? "checker.exe" : "checker");
             
-            // 2. Biên dịch (Có trỏ cờ -I chỉ về thư mục gốc /lib để include được testlib.h)
-            // Lấy thư mục gốc thông qua System.getProperty("user.dir")
             String rootDir = System.getProperty("user.dir");
             File libDir = new File(rootDir, "lib");
 
@@ -68,16 +55,44 @@ public class SandboxService {
             
             compilePb.redirectErrorStream(true);
             Process compileProcess = compilePb.start();
-            boolean compiled = compileProcess.waitFor(15000, java.util.concurrent.TimeUnit.MILLISECONDS);
+            // testlib.h là thư viện rất nặng (gần 2000 dòng code), trên Windows (MinGW) g++ có thể mất 30s-40s để biên dịch.
+            boolean compiled = compileProcess.waitFor(60000, java.util.concurrent.TimeUnit.MILLISECONDS);
             if (!compiled || compileProcess.exitValue() != 0 || !exeFile.exists()) {
+                // Nếu timeout thì process vẫn sống -> kill luôn. Còn lỗi biên dịch thì process đã chết -> đọc lỗi
+                if (!compiled && compileProcess.isAlive()) {
+                    compileProcess.destroyForcibly();
+                    return new ExecutionResult("CE", "", "Lỗi biên dịch Checker: Quá thời gian (Tối đa 60s).", 0, -1);
+                }
                 String error = new String(compileProcess.getInputStream().readAllBytes());
-                compileProcess.destroyForcibly();
                 return new ExecutionResult("CE", "", "Lỗi biên dịch Checker:\n" + error, 0, compileProcess.exitValue());
             }
             
-            // 3. Thực thi file checker
+            return new ExecutionResult("SUCCESS", exeFile.getAbsolutePath(), "", 0, 0);
+            
+        } catch (Exception e) {
+            return new ExecutionResult("RTE", "", "Lỗi khi compile Checker: " + e.getMessage(), 0, -1);
+        }
+    }
+
+    /**
+     * Chạy custom checker (testlib.h) với file exe đã biên dịch
+     */
+    public ExecutionResult executeChecker(String exePath, String inputData, String expectedOutput, String actualOutput, long timeLimitMs) {
+        try {
+            Path tempDir = Files.createTempDirectory("checker_run");
+            File tempFolder = tempDir.toFile();
+            
+            File inFile = new File(tempFolder, "input.txt");
+            Files.writeString(inFile.toPath(), inputData != null ? inputData : "");
+            
+            File actualFile = new File(tempFolder, "actual.txt");
+            Files.writeString(actualFile.toPath(), actualOutput != null ? actualOutput : "");
+            
+            File expectedFile = new File(tempFolder, "expected.txt");
+            Files.writeString(expectedFile.toPath(), expectedOutput != null ? expectedOutput : "");
+            
             ProcessBuilder runPb = new ProcessBuilder(
-                    exeFile.getAbsolutePath(),
+                    exePath,
                     inFile.getAbsolutePath(),
                     actualFile.getAbsolutePath(),
                     expectedFile.getAbsolutePath()
