@@ -50,14 +50,14 @@ public class AIService {
      * Phân tích đề bài từ Text hoặc Ảnh
      */
     public Problem analyzeProblem(String text, File imageFile) throws Exception {
-        String prompt = "Bạn là một AI chuyên gia về lập trình thi đấu (IOI, ICPC). " +
-                "Hãy phân tích đề bài sau và trích xuất các thông tin dưới định dạng JSON.\n" +
+        String prompt = "Bạn là một AI chuyên gia hàng đầu về Lập trình thi đấu (IOI, ICPC). " +
+                "Nhiệm vụ của bạn là phân tích đề bài sau và trích xuất thông tin chuẩn xác tuyệt đối dưới định dạng JSON, KHÔNG LÀM SAI LỆCH BÀI TOÁN.\n" +
                 "Yêu cầu các trường JSON bắt buộc:\n" +
-                "1. \"title\": Tên bài (nếu không có trong đề, hãy tự đặt ngắn gọn).\n" +
+                "1. \"title\": Tên bài (nếu không có trong đề, hãy tự đặt ngắn gọn và có ý nghĩa).\n" +
                 "2. \"timeLimitMs\": Giới hạn thời gian tính bằng số milliseconds (Ví dụ 1 giây = 1000). Nếu không tìm thấy, trả về 1000.\n" +
                 "3. \"memoryLimitMb\": Giới hạn bộ nhớ tính bằng số Megabytes. Nếu không tìm thấy, trả về 256.\n" +
-                "4. \"content\": ĐỂ NGUYÊN VĂN. Tuyệt đối giữ nguyên vẹn toàn bộ các con số ràng buộc, công thức toán học, yêu cầu định dạng đầu vào/đầu ra. Nếu nhận đầu vào là ảnh, hãy trích xuất (OCR) toàn bộ văn bản và công thức toán trong ảnh thành dạng Text (Markdown) không thiếu một chữ nào.\n" +
-                "Chỉ trả về NGAY khối JSON hợp lệ, KHÔNG VIẾT GÌ THÊM (no markdown, no extra text).";
+                "4. \"content\": TUYỆT ĐỐI GIỮ NGUYÊN BẢN CHẤT BÀI TOÁN. Trình bày lại bằng Markdown thật rõ ràng với các mục: Đề bài, Dữ liệu vào (Input), Dữ liệu ra (Output), Giới hạn (Constraints) và Ví dụ (Example). Các công thức toán và biến số bắt buộc dùng format ký hiệu toán học. Giữ nguyên vẹn mọi con số ràng buộc, logic bài toán, và định dạng test. TUYỆT ĐỐI KHÔNG tóm tắt làm mất dữ kiện, KHÔNG bịa thêm thông tin. Nếu nhận đầu vào là ảnh, OCR đầy đủ từng chữ, từng số, từng biểu thức không thiếu sót.\n" +
+                "Chỉ trả về NGAY khối JSON hợp lệ, KHÔNG VIẾT GÌ THÊM (no markdown wrapper like ```json, no extra text).";
 
         String imageBase64 = null;
         if (imageFile != null && imageFile.exists()) {
