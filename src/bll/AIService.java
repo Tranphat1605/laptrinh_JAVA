@@ -50,14 +50,19 @@ public class AIService {
      * Phân tích đề bài từ Text hoặc Ảnh
      */
     public Problem analyzeProblem(String text, File imageFile) throws Exception {
-        String prompt = "Bạn là một AI chuyên gia về lập trình thi đấu (IOI, ICPC). " +
-                "Hãy phân tích đề bài sau và trích xuất các thông tin dưới định dạng JSON.\n" +
-                "Yêu cầu các trường JSON bắt buộc:\n" +
+        String prompt = "Bạn là một siêu AI đánh máy (OCR) chuyên nghiệp được thiết kế riêng cho nền tảng thi đấu lập trình (IOI, ICPC). " +
+                "Nhiệm vụ tối thượng của bạn là ĐỌC CHÍNH XÁC VÀ TRÍCH XUẤT Y XÌ ĐÚC (1:1) NHỮNG GÌ BẠN NHÌN THẤY thành dữ liệu văn bản. "+
+                "TUYỆT ĐỐI KHÔNG TÓM TẮT, KHÔNG HƯ CẤU, KHÔNG GIẢI THÍCH.\n" +
+                "Hãy trích xuất và trả về dữ liệu dưới định dạng JSON với các trường bắt buộc sau:\n" +
                 "1. \"title\": Tên bài (nếu không có trong đề, hãy tự đặt ngắn gọn).\n" +
                 "2. \"timeLimitMs\": Giới hạn thời gian tính bằng số milliseconds (Ví dụ 1 giây = 1000). Nếu không tìm thấy, trả về 1000.\n" +
                 "3. \"memoryLimitMb\": Giới hạn bộ nhớ tính bằng số Megabytes. Nếu không tìm thấy, trả về 256.\n" +
-                "4. \"content\": ĐỂ NGUYÊN VĂN. Tuyệt đối giữ nguyên vẹn toàn bộ các con số ràng buộc, công thức toán học, yêu cầu định dạng đầu vào/đầu ra. Nếu nhận đầu vào là ảnh, hãy trích xuất (OCR) toàn bộ văn bản và công thức toán trong ảnh thành dạng Text (Markdown) không thiếu một chữ nào.\n" +
-                "Chỉ trả về NGAY khối JSON hợp lệ, KHÔNG VIẾT GÌ THÊM (no markdown, no extra text).";
+                "4. \"content\": ĐÂY LÀ PHẦN QUAN TRỌNG NHẤT, BẮT BUỘC CHÉP LẠI Y NGUYÊN VĂN 100% TỪ GỐC ĐẾN NGỌN BAO GỒM:\n" +
+                "   - Giữ nguyên toàn bộ cấu trúc đoạn, bảo toàn tuyệt đối dấu xuống dòng bằng ký tự `\\n` hoặc `\\n\\n`.\n" +
+                "   - BĂT BUỘC xuống dòng rõ ràng để tách biệt các cụm: Đề bài, Giới hạn (Constraints), Đầu vào (Input), Đầu ra (Output).\n" +
+                "   - BẢO TOÀN NGUYÊN VẸN CÁC KÝ HIỆU TOÁN HỌC, CÁC BIỂU THỨC (ví dụ: N <= 10^5, A_i, mảng 2 chiều).\n" +
+                "   - PHẢI SAO CHÉP CHÍNH XÁC TỪNG CON SỐ, TỪNG KHOẢNG TRẮNG, TỪNG DẤU XUỐNG DÒNG trong phần BẢNG VÍ DỤ TESTCASE (Sample Input / Sample Output) để máy chấm không bị lỗi form.\n" +
+                "Chỉ trả về trực tiếp DỮ LIỆU JSON HỢP LỆ, KHÔNG CHỨA BẤT KỲ VĂN BẢN TRÌNH BÀY NÀO KHÁC (no markdown, no extra text).";
 
         String imageBase64 = null;
         if (imageFile != null && imageFile.exists()) {
@@ -70,6 +75,8 @@ public class AIService {
         String responseMessage = sendRequestWithRetry(payload);
 
         Problem p = new Problem();
+        p.setOriginalImageBase64(imageBase64); // Lưu lại ảnh gốc để xài cho bước sau
+        p.setOriginalRawText(text); // Lưu lại 100% text thô người dùng gõ
         try {
             JsonObject jsonOutput = this.gson.fromJson(responseMessage, JsonObject.class);
             if (jsonOutput.has("title")) p.setTitle(jsonOutput.get("title").getAsString());
@@ -98,19 +105,20 @@ public class AIService {
                 "Viết code C++ generator sử dụng testlib.h để tự động sinh dữ liệu input cho bài toán trên.\n" +
                 "Bắt buộc:\n" +
                 "1. Luôn khai báo đầy đủ `#include <iostream>` và `using namespace std;` ở đầu file.\n" +
-                "2. Dòng đầu tiên trong main: registerGen(argc, argv, 1);\n" +
-                "3. Hỗ trợ seed từ argv[1].\n" +
-                "4. In ra đúng định dạng Input mà đề bài yêu cầu, không in text thừa.\n" +
-                "5. LƯU Ý QUAN TRỌNG VỀ testlib.h: ĐỂ SINH SỐ NGẪU NHIÊN, BẮT BUỘC DÙNG `rnd.next(min, max)`.\n" +
-                "   -> KHÔNG BAO GIỜ được dùng các hàm tự bịa hoặc viết sai chính tả như `inf.ReadInt()`, `inf.readInt()` vì Generator KHÔNG đọc dữ liệu (inf) mà là SINH dữ liệu (rnd).\n"+
+                "2. Dòng đầu tiên trong main BẮT BUỘC là: `registerGen(argc, argv, 1);`\n" +
+                "3. Hỗ trợ seed từ `argv[1]`.\n" +
+                "4. In ra ĐÚNG ĐỊNH DẠNG Input mà đề bài yêu cầu, KHÔNG BAO GIỜ in text thừa (như \"N=\", \"M=\"). Chỉ in ra những con số phân cách bằng khoảng trắng hoặc xuống dòng.\n" +
+                "5. LƯU Ý QUAN TRỌNG VỀ testlib.h: ĐỂ SINH SỐ NGẪU NHIÊN, BẮT BUỘC DÙNG `rnd.next(min, max)` HOẶC `rnd.next(max)`.\n" +
+                "   -> KHÔNG BAO GIỜ được dùng các hàm đọc dữ liệu như `inf.readInt()` vì Generator là SINH dữ liệu (rnd).\n"+
                 "6. CHÚ Ý QUAN TRỌNG VỀ ĐỘ MẠNH (STRONG TESTCASES):\n" +
-                "   - Generator cần lấy arg từ argv[2] (nếu truyền vào) làm tham số để quyết định mode sinh testcase.\n" +
-                "   - Nếu mode là 'edge': hãy sinh các trường hợp biên, giá trị tối thiểu, tối đa (VD: N=0, N=1, mảng rỗng, mảng gồm các phần tử bằng nhau hoặc âm hoàn toàn).\n" +
-                "   - Nếu mode là 'max': phải sinh Input sao cho N hoặc giá trị đạt sát Tối Đa của ràng buộc đề bài (áp lực cao để tạo TLE/MLE).\n" +
-                "   - Nếu mode là 'random' hoặc không có mode, sinh Random ngẫu nhiên.\n" +
-                "   - TUYỆT ĐỐI KHÔNG sử dụng hàm quit() với 1 tham số (vd: quit(\"lỗi\")). Nếu cần báo lỗi hãy dùng quitf(_fail, \"Lỗi...\");\n" +
-                "\nChỉ trả về code C++, không markdown.";
-        String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
+                "   - Generator cần lấy arg từ `argv[2]` (nếu có) làm tham số để quyết định mode sinh testcase.\n" +
+                "   - Nếu mode là 'edge': Sinh các trường hợp biên, giá trị tối thiểu, tối đa (VD: N=1, mảng rỗng, mảng toàn số 0).\n" +
+                "   - Nếu mode là 'max': BẮT BUỘC sinh Input có N, M, hoặc biến Vòng lặp lớn nhất (VD: sát 10^5, 10^9) theo đúng giới hạn đề bài để gây TLE.\n" +
+                "   - TUYỆT ĐỐI KHÔNG sử dụng hàm `quit()` với 1 tham số như `quit(\"lỗi\")`. Thay vào đó, dùng `quitf(_fail, \"Lý do lỗi\");` nếu cần thiết.\n" +
+                "\nChỉ trả về trực tiếp mã C++ thuần túy, tuyệt đối KHÔNG có markdown, KHÔNG thêm giải thích xung quanh.";
+        
+        String model = (problem.getOriginalImageBase64() != null) ? VISION_MODEL : TEXT_MODEL;
+        String payload = buildPayloadWithSystem(model, systemPrompt, userPrompt, problem.getOriginalImageBase64());
         return sendRequestWithRetry(payload);
     }
 
@@ -124,18 +132,20 @@ public class AIService {
                 "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
                 "=== YÊU CẦU ===\n" +
                 "Viết code C++ checker sử dụng testlib.h cho bài toán trên.\n" +
-                "- BẮT BUỘC #include <bits/stdc++.h> hoặc đầy đủ các thư viện C++ cần thiết (<iostream>, <cmath>, <vector>, v.v.) trước khi #include \"testlib.h\" để không bị lỗi Missing Declaration khi biên dịch.\n" +
-                "- Dòng đầu tiên trong main BẮT BUỘC phải là: registerTestlibCmd(argc, argv);\n" +
-                "- BẮT BUỘC sử dụng: inf.read... để đọc input.\n" +
-                "- BẮT BUỘC sử dụng: ans.read... để đọc đáp án chuẩn.\n" +
-                "- BẮT BUỘC sử dụng: ouf.read... để đọc output của thí sinh.\n" +
-                "- CHÚ Ý CÚ PHÁP TESTLIB.H: Hàm đọc trả về trực tiếp giá trị (VD: `long long a = ans.readLong();` hoặc `int b = ouf.readInt();`). TUYỆT ĐỐI KHÔNG truyền tham chiếu vào hàm (như `ans.readLong(a)` - Cú pháp này sai và sẽ gây lỗi biên dịch).\n" +
-                "- LƯU Ý VỀ TÊN BIẾN: TUYỆT ĐỐI KHÔNG đặt tên biến cục bộ là `ans`, `ouf`, `inf` (VD: KHÔNG viết `int ans = ans.readInt();`) vì sẽ làm hỏng đối tượng stream của testlib. Hãy dùng `jury_ans`, `contestant_ans`, `ouf_ans`.\n" +
-                "- TUYỆT ĐỐI KHÔNG SỬ DỤNG std::cin hay std::cout hay scanf/printf.\n" +
-                "- Gọi quitf(_ok, ...) nếu đúng, hoặc quitf(_wa, ...) nếu sai.\n" +
-                "- LƯU Ý RẤT QUAN TRỌNG: TUYỆT ĐỐI KHÔNG ĐƯỢC QUÊN DẤU GẠCH DƯỚI khi gọi mã trạng thái. BẮT BUỘC phải dùng `_wa`, `_ok`, `_pe`. TUYỆT ĐỐI KHÔNG sử dụng `wa`, `ok`, `pe`.\n" +
-                "Chỉ trả về code C++, không markdown.";
-        String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
+                "- BẮT BUỘC có `#include <bits/stdc++.h>` trước tiên, rồi mới `#include \"testlib.h\"` để tránh lỗi thiếu khai báo khi biên dịch.\n" +
+                "- BẮT BUỘC dòng đầu tiên trong hàm main() là: `registerTestlibCmd(argc, argv);`\n" +
+                "- BẮT BUỘC sử dụng: `inf.read...` để đọc dữ liệu Input.\n" +
+                "- BẮT BUỘC sử dụng: `ans.read...` để đọc biểu thức đáp án chuẩn (Jury).\n" +
+                "- BẮT BUỘC sử dụng: `ouf.read...` để đọc đầu ra của Bài thí sinh nộp.\n" +
+                "- CHÚ Ý CÚ PHÁP TESTLIB.H: Hàm đọc sẽ trực tiếp trả về giá trị (VD: `long long a = ans.readLong();` hoặc `int b = ouf.readInt();`). TUYỆT ĐỐI KHÔNG truyền tham chiếu vào hàm kiểu `ans.readLong(a)` vì điều này sẽ gây lỗi biên dịch nghiêm trọng.\n" +
+                "- LƯU Ý VỀ TÊN BIẾN: Khai báo tên biến cục bộ là `jury_ans`, `contestant_ans`... TUYỆT ĐỐI KHÔNG đặt tên biến là `ans` hay `ouf` hay `inf` (VD: TRÁNH `int ans = ans.readInt();`) vì nó sẽ ghi đè luồng stream của thư viện testlib.h\n" +
+                "- TUYỆT ĐỐI KHÔNG dung std::cin, std::cout, scanf, hay printf trong bất kì đâu.\n" +
+                "- Chỉ gọi `quitf(_ok, \"Đúng\");` nếu thí sinh trả lời chính xác và `quitf(_wa, \"Sai\");` nếu sai kết quả.\n" +
+                "- LƯU Ý MÃ TRẠNG THÁI: BẮT BUỘC dùng dấu gạch dưới như `_wa`, `_ok`, `_pe`. TUYỆT ĐỐI KHÔNG dùng `wa`, `ok` vì sẽ lỗi dịch code.\n" +
+                "Chỉ trả về trực tiếp mã C++ thuần túy, tuyệt đối KHÔNG có markdown, KHÔNG thêm giải thích xung quanh.";
+        
+        String model = (problem.getOriginalImageBase64() != null) ? VISION_MODEL : TEXT_MODEL;
+        String payload = buildPayloadWithSystem(model, systemPrompt, userPrompt, problem.getOriginalImageBase64());
         return sendRequestWithRetry(payload);
     }
 
@@ -173,7 +183,8 @@ public class AIService {
                 "- BẮT BUỘC #include đầy đủ các thư viện C++ cần thiết (như <iostream>, <cmath>, <vector>, <algorithm>, v.v.) hoặc dùng <bits/stdc++.h> để không bị lỗi Missing Declaration khi biên dịch.\n" +
                 "\nChỉ trả về mã C++ thuần túy, không format markdown, không giải thích dòng nào cả.";
 
-        String payload = buildTextPayload(TEXT_MODEL, prompt);
+        String model = (problem.getOriginalImageBase64() != null) ? VISION_MODEL : TEXT_MODEL;
+        String payload = buildPayload(model, prompt, null, problem.getOriginalImageBase64());
         return sendRequestWithRetry(payload);
     }
 
@@ -318,7 +329,7 @@ public class AIService {
      * Build payload với system prompt + user message (tốt hơn cho code generation).
      * Groq/OpenAI hỗ trợ role "system" để set ngữ cảnh chuyên gia.
      */
-    private String buildPayloadWithSystem(String model, String systemPrompt, String userMessage) {
+    private String buildPayloadWithSystem(String model, String systemPrompt, String userMessage, String imageBase64) {
         JsonObject payload = new JsonObject();
         payload.addProperty("model", model);
 
@@ -333,7 +344,26 @@ public class AIService {
         // User message — đề bài + yêu cầu
         JsonObject userMsg = new JsonObject();
         userMsg.addProperty("role", "user");
-        userMsg.addProperty("content", userMessage);
+        
+        if (imageBase64 != null) {
+            JsonArray contentArr = new JsonArray();
+            JsonObject textPart = new JsonObject();
+            textPart.addProperty("type", "text");
+            textPart.addProperty("text", userMessage);
+            contentArr.add(textPart);
+
+            JsonObject imagePart = new JsonObject();
+            imagePart.addProperty("type", "image_url");
+            JsonObject imageUrl = new JsonObject();
+            imageUrl.addProperty("url", "data:image/jpeg;base64," + imageBase64);
+            imagePart.add("image_url", imageUrl);
+            contentArr.add(imagePart);
+
+            userMsg.add("content", contentArr);
+        } else {
+            userMsg.addProperty("content", userMessage);
+        }
+        
         messages.add(userMsg);
 
         payload.add("messages", messages);
