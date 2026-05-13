@@ -172,10 +172,14 @@ public class TeacherFrame extends JFrame {
 
     /** Kiểm tra đề bài đã nhập chưa, trả về true nếu hợp lệ. */
     private boolean validateProblemInput() {
+        if (selectedImageFile != null && selectedImageFile.exists()) {
+            return true;
+        }
+
         String text = problemInputArea.getText().trim();
         if (text.isEmpty() || text.equals(PLACEHOLDER_TEXT)) {
             JOptionPane.showMessageDialog(this,
-                "⚠ Vui lòng nhập nội dung đề bài vào ô bên trái trước khi gọi AI!",
+                "⚠ Vui lòng nhập nội dung đề bài (hoặc chọn Ảnhđính kèm) trước khi gọi AI!",
                 "Chưa có đề bài", JOptionPane.WARNING_MESSAGE);
             problemInputArea.requestFocus();
             return false;
@@ -231,7 +235,13 @@ public class TeacherFrame extends JFrame {
         btnAnalyzeAI.setForeground(Color.WHITE);
         btnAnalyzeAI.addActionListener(e -> {
             if (!validateProblemInput()) return;  // Chặn nếu chưa nhập đề
-            controller.analyzeProblem(problemInputArea.getText(), selectedImageFile,
+
+            String textContext = problemInputArea.getText();
+            if (textContext.equals(PLACEHOLDER_TEXT)) {
+                textContext = "";
+            }
+
+            controller.analyzeProblem(textContext, selectedImageFile,
                 new TeacherController.AnalysisListener() {
                     @Override public void onStart() {
                         aiAnalysisLogArea.setText("⏳ Đang phân tích cấu trúc đề bài...\n\n");
