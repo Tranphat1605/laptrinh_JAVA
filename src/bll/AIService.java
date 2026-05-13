@@ -130,7 +130,9 @@ public class AIService {
                 "3. Hỗ trợ seed từ `argv[1]`.\n" +
                 "4. In ra ĐÚNG ĐỊNH DẠNG Input mà đề bài yêu cầu, KHÔNG BAO GIỜ in text thừa (như \"N=\", \"M=\"). Chỉ in ra những con số phân cách bằng khoảng trắng hoặc xuống dòng.\n" +
                 "5. LƯU Ý QUAN TRỌNG VỀ testlib.h: ĐỂ SINH SỐ NGẪU NHIÊN, BẮT BUỘC DÙNG `rnd.next(min, max)` HOẶC `rnd.next(max)`.\n" +
-                "   -> KHÔNG BAO GIỜ được dùng các hàm đọc dữ liệu như `inf.readInt()` vì Generator là SINH dữ liệu (rnd).\n"+
+                "   - TUYỆT ĐỐI KHÔNG sử dụng ký hiệu khoa học như `1e6`, `1e9` bên trong hàm `rnd.next()`. Thay vào đó hãy viết rõ số nguyên (VD: `1000000`) hoặc ép kiểu rõ ràng `(int)1e6` để tránh lỗi 'call of overloaded next is ambiguous'.\n" +
+                "   - Đảm bảo kiểu dữ liệu của tham số min và max phải đồng nhất (cùng là int hoặc cùng là long long).\n" +
+                "   - KHÔNG BAO GIỜ được dùng các hàm đọc dữ liệu như `inf.readInt()` vì Generator là SINH dữ liệu (rnd).\n"+
                 "6. CHÚ Ý QUAN TRỌNG VỀ ĐỘ MẠNH (STRONG TESTCASES):\n" +
                 "   - Generator cần lấy arg từ `argv[2]` (nếu có) làm tham số để quyết định mode sinh testcase.\n" +
                 "   - Nếu mode là 'edge': Sinh các trường hợp biên, giá trị tối thiểu, tối đa (VD: N=1, mảng rỗng, mảng toàn số 0).\n" +
@@ -154,7 +156,8 @@ public class AIService {
                 "=== YÊU CẦU ===\n" +
                 "Viết code C++ checker sử dụng testlib.h cho bài toán trên.\n" +
                 "- BẮT BUỘC có `#include <bits/stdc++.h>` trước tiên, rồi mới `#include \"testlib.h\"` để tránh lỗi thiếu khai báo khi biên dịch.\n" +
-                "- BẮT BUỘC dòng đầu tiên trong hàm main() là: `registerTestlibCmd(argc, argv);`\n" +
+                "- BẮT BUỘC dòng đầu tiên trong hàm main() là: `registerTestlibCmd(argc, argv);` và kết thúc bằng `return 0;`.\n" +
+                "- BẮT BUỘC toàn bộ code phải nằm trong một khối duy nhất, hàm `int main(int argc, char* argv[])` phải nằm ở ngoài cùng, tuyệt đối KHÔNG lồng trong hàm khác. Cẩn thận các dấu đóng mở ngoặc `{ }`.\n" +
                 "- BẮT BUỘC sử dụng: `inf.read...` để đọc dữ liệu Input.\n" +
                 "- BẮT BUỘC sử dụng: `ans.read...` để đọc biểu thức đáp án chuẩn (Jury).\n" +
                 "- BẮT BUỘC sử dụng: `ouf.read...` để đọc đầu ra của Bài thí sinh nộp.\n" +

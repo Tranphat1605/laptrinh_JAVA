@@ -47,7 +47,7 @@ public class SandboxService {
             File libDir = new File(rootDir, "lib");
 
             ProcessBuilder compilePb = new ProcessBuilder(
-                    "g++", "-O2", "-std=c++17", 
+                    "g++", "-O2", "-std=c++17", "-mconsole",
                     "-I" + libDir.getAbsolutePath(), 
                     sourceFile.getAbsolutePath(), 
                     "-o", exeFile.getAbsolutePath()
