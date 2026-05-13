@@ -56,7 +56,7 @@ public class AIService {
                 "1. \"title\": Tên bài (nếu không có trong đề, hãy tự đặt ngắn gọn).\n" +
                 "2. \"timeLimitMs\": Giới hạn thời gian tính bằng số milliseconds (Ví dụ 1 giây = 1000). Nếu không tìm thấy, trả về 1000.\n" +
                 "3. \"memoryLimitMb\": Giới hạn bộ nhớ tính bằng số Megabytes. Nếu không tìm thấy, trả về 256.\n" +
-                "4. \"content\": Gom chung TẤT CẢ các phần: Mô tả yêu cầu, Giới hạn đầu vào (Constraints), Định dạng Input, Định dạng Output vào thành một đoạn văn bản tóm tắt mạch lạc.\n" +
+                "4. \"content\": ĐỂ NGUYÊN VĂN. Tuyệt đối giữ nguyên vẹn toàn bộ các con số ràng buộc, công thức toán học, yêu cầu định dạng đầu vào/đầu ra. Nếu nhận đầu vào là ảnh, hãy trích xuất (OCR) toàn bộ văn bản và công thức toán trong ảnh thành dạng Text (Markdown) không thiếu một chữ nào.\n" +
                 "Chỉ trả về NGAY khối JSON hợp lệ, KHÔNG VIẾT GÌ THÊM (no markdown, no extra text).";
 
         String imageBase64 = null;
@@ -145,7 +145,10 @@ public class AIService {
     public String generateSampleCode(Problem problem, String type) throws Exception {
         String constraintInstructions = "";
         if (type.equals("AC")) {
-            constraintInstructions = "- Là code C++ giải chuẩn xác nhất, độ phức tạp thời gian cực kỳ tối ưu, qua được toàn bộ các trường hợp Edge Cases và Input cực lớn.\n";
+            constraintInstructions = "- Là code C++ giải chuẩn xác nhất, độ phức tạp thời gian cực kỳ tối ưu, qua được toàn bộ các trường hợp Edge Cases và Input cực lớn.\n" +
+                                     "- BẮT BUỘC: Sử dụng `long long` thay cho `int` trong mọi biến tính toán, vòng lặp mảng lớn.\n" +
+                                     "- BẮT BUỘC: TUYỆT ĐỐI CHỈ IN RA KẾT QUẢ, KHÔNG in chữ dư thừa như \"Result :\", \"Ket qua\".\n" +
+                                     "- BẮT BUỘC: Có `ios_base::sync_with_stdio(0); cin.tie(0);` ở đầu main().\n";
         } else if (type.equals("WA")) {
             constraintInstructions = "- MỤC TIÊU TỐI THƯỢNG: ĐÂY LÀ CODE DÙNG ĐỂ BẪY LỖI, NÊN PHẢI BỊ WRONG ANSWER (SAI KẾT QUẢ) TRÊN ÍT NHẤT 1 TESTCASE, TUYỆT ĐỐI KHÔNG ĐƯỢC VIẾT CODE ĐÚNG HOÀN TOÀN (100% AC)!!!\n" +
                                      "- Cố tình chèn vào một lỗi Logic tế nhị (Subtle logic bug) hoặc bỏ sót Trường hợp biên (Edge cases).\n" +
