@@ -60,7 +60,7 @@ public class TeacherFrame extends JFrame {
         setLayout(new BorderLayout());
 
         // API key chỉ cần đặt ở 1 chỗ này
-        controller     = new TeacherController("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");
+        controller     = new TeacherController("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");
         evalController = new EvaluationController();
 
         // Top: Stepper
@@ -292,12 +292,41 @@ public class TeacherFrame extends JFrame {
         generatorCodeArea.setBorder(BorderFactory.createTitledBorder("Generator Code (Sinh Testcase - C++)"));
         checkerCodeArea.setBorder(BorderFactory.createTitledBorder("Checker Code (So khớp đáp án - C++)"));
 
+        // Panel chứa Checker Area và nút ép buộc
+        JPanel checkerContainer = new JPanel(new BorderLayout());
+        checkerContainer.add(new JScrollPane(checkerCodeArea), BorderLayout.CENTER);
+        
+        JButton btnForceCheck = new JButton("Ép buộc sinh Checker");
+        btnForceCheck.setFont(new Font("Arial", Font.PLAIN, 11));
+        btnForceCheck.addActionListener(e -> {
+            if (currentProblem == null) return;
+            controller.forceGenerateChecker(currentProblem, new TeacherController.GenerationListener() {
+                @Override public void onStart() {
+                    checkerCodeArea.setText("// ⏳ Đang ép buộc AI sinh Checker...\n");
+                    btnForceCheck.setEnabled(false);
+                }
+                @Override public void onComplete(String gen, String check) {
+                    checkerCodeArea.setText(check);
+                    btnForceCheck.setEnabled(true);
+                }
+                @Override public void onError(String msg) {
+                    checkerCodeArea.setText("// ❌ Lỗi: " + msg);
+                    btnForceCheck.setEnabled(true);
+                }
+            });
+        });
+        checkerContainer.add(btnForceCheck, BorderLayout.SOUTH);
+
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
             new JScrollPane(generatorCodeArea),
-            new JScrollPane(checkerCodeArea));
+            checkerContainer);
         splitPane.setResizeWeight(0.5);
 
         JButton btnGen = new JButton("Yêu cầu AI sinh Testcase & Checker");
+        btnGen.setBackground(new Color(40, 120, 255));
+        btnGen.setForeground(Color.WHITE);
+        btnGen.setFont(new Font("Arial", Font.BOLD, 13));
+        
         btnGen.addActionListener(e -> {
             if (currentProblem == null) {
                  JOptionPane.showMessageDialog(this, "⚠ Vui lòng phân tích đề bài ở Bước 1 trước khi tự động sinh!", "Chưa có đề", JOptionPane.WARNING_MESSAGE);
@@ -307,15 +336,17 @@ public class TeacherFrame extends JFrame {
                 new TeacherController.GenerationListener() {
                     @Override public void onStart() {
                         generatorCodeArea.setText("// ⏳ Đang gọi AI sinh Generator...\n");
-                        checkerCodeArea.setText("// ⏳ Đang gọi AI sinh Checker...\n");
+                        checkerCodeArea.setText("// ⏳ Đang gọi AI phân tích & sinh Checker...\n");
+                        btnGen.setEnabled(false);
                     }
                     @Override public void onComplete(String gen, String check) {
                         generatorCodeArea.setText(gen);
                         checkerCodeArea.setText(check);
+                        btnGen.setEnabled(true);
                     }
                     @Override public void onError(String msg) {
                         generatorCodeArea.setText("// ❌ Lỗi: " + msg);
-                        checkerCodeArea.setText("");
+                        btnGen.setEnabled(true);
                     }
                 });
         });

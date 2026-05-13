@@ -70,17 +70,40 @@ public class AIService {
         String responseMessage = sendRequestWithRetry(payload);
 
         Problem p = new Problem();
+        p.setTimeLimitMs(1000);
+        p.setMemoryLimitMb(256);
+        p.setSource("AI Generated");
+
         try {
-            JsonObject jsonOutput = this.gson.fromJson(responseMessage, JsonObject.class);
-            if (jsonOutput.has("title")) p.setTitle(jsonOutput.get("title").getAsString());
+            // CẢI TIẾN: Dùng Regex để tìm khối JSON thực sự trong đống text AI trả về
+            String jsonStr = responseMessage;
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\{.*\\}", java.util.regex.Pattern.DOTALL).matcher(responseMessage);
+            if (matcher.find()) {
+                jsonStr = matcher.group();
+            }
+
+            JsonObject jsonOutput = this.gson.fromJson(jsonStr, JsonObject.class);
+            
+            if (jsonOutput.has("title")) {
+                p.setTitle(jsonOutput.get("title").getAsString());
+            } else {
+                p.setTitle("Bài tập sinh bởi AI (" + System.currentTimeMillis() % 10000 + ")");
+            }
+
             if (jsonOutput.has("timeLimitMs")) p.setTimeLimitMs(jsonOutput.get("timeLimitMs").getAsInt());
             if (jsonOutput.has("memoryLimitMb")) p.setMemoryLimitMb(jsonOutput.get("memoryLimitMb").getAsInt());
-            if (jsonOutput.has("content")) p.setContent(jsonOutput.get("content").getAsString());
+            
+            if (jsonOutput.has("content")) {
+                p.setContent(jsonOutput.get("content").getAsString());
+            } else {
+                p.setContent(responseMessage); // Fallback dùng toàn bộ text nếu không parse được trường content
+            }
+
         } catch (Exception e) {
             System.err.println("AI không trả về JSON hợp lệ: " + e.getMessage());
+            // FALLBACK TỐI THƯỢNG: Đảm bảo không bao giờ bị NULL khi vào DB
+            p.setTitle("Bài tập AI " + new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date()));
             p.setContent(responseMessage);
-            p.setTimeLimitMs(1000);
-            p.setMemoryLimitMb(256);
         }
         return p;
     }
@@ -137,6 +160,27 @@ public class AIService {
                 "Chỉ trả về code C++, không markdown.";
         String payload = buildPayloadWithSystem(TEXT_MODEL, systemPrompt, userPrompt);
         return sendRequestWithRetry(payload);
+    }
+
+    /**
+     * Hỏi AI xem bài toán này có cần Custom Checker không.
+     */
+    public boolean checkIfCheckerIsNeeded(Problem problem) throws Exception {
+        String prompt = "Bạn là chuyên gia thẩm định đề bài lập trình thi đấu.\n" +
+                "Nhiệm vụ: Hãy phân tích đề bài sau và quyết định xem có cần viết 'Custom Checker' (C++ testlib.h) để chấm điểm hay không.\n\n" +
+                "--- TRƯỜNG HỢP CẦN CHECKER (YES) ---\n" +
+                "1. Bài toán có nhiều kết quả đúng (VD: 'In ra một cách bất kỳ', 'In ra bất kỳ bộ số nào thỏa mãn...').\n" +
+                "2. Bài toán yêu cầu độ chính xác số thực (VD: 'Sai số không quá 10^-6').\n" +
+                "3. Thứ tự các phần tử trong Output không quan trọng.\n\n" +
+                "--- TRƯỜNG HỢP KHÔNG CẦN CHECKER (NO) ---\n" +
+                "1. Kết quả là duy nhất (VD: Tính tổng, đếm số cách, tìm giá trị Min/Max cụ thể).\n" +
+                "2. Bài toán chỉ in ra YES/NO hoặc một chuỗi cố định.\n\n" +
+                "=== ĐỀ BÀI ===\n" + problem.toString() + "\n\n" +
+                "Chỉ trả về 'YES' hoặc 'NO'. KHÔNG VIẾT GÌ THÊM.";
+
+        String payload = buildTextPayload(TEXT_MODEL, prompt);
+        String response = sendRequestWithRetry(payload).trim().toUpperCase();
+        return response.contains("YES");
     }
 
     /**

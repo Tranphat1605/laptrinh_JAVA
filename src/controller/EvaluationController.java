@@ -57,17 +57,25 @@ public class EvaluationController {
                 listener.onProgress(0, totalCases, "Đang gọi AI sinh Solution Code AC (C++)...");
                 String acCode = aiService.generateSampleCode(problem, "AC");
 
-                listener.onProgress(0, totalCases, "Đang gọi AI sinh Checker Code (C++)...");
-                String checkerCodeRaw = aiService.generateChecker(problem);
+                listener.onProgress(0, totalCases, "Đang phân tích xem có cần Custom Checker không...");
+                boolean needsChecker = aiService.checkIfCheckerIsNeeded(problem);
                 
-                // Lưu Checker vào Database
-                if (problem != null && problem.getId() <= 0) {
-                    new dal.ProblemDAO().addProblem(problem);
+                entity.Checker checker = null;
+                if (needsChecker) {
+                    listener.onProgress(0, totalCases, "Đang gọi AI sinh Checker Code (C++)...");
+                    String checkerCodeRaw = aiService.generateChecker(problem);
+                    
+                    // Lưu Checker vào Database
+                    if (problem != null && problem.getId() <= 0) {
+                        new dal.ProblemDAO().addProblem(problem);
+                    }
+                    checker = new entity.Checker(0, problem != null ? problem.getId() : 1, cleanMarkdown(checkerCodeRaw), "cpp");
+                    dal.CheckerDAO checkerDAO = new dal.CheckerDAO();
+                    int checkerId = checkerDAO.addChecker(checker);
+                    if (checkerId > 0) checker.setId(checkerId);
+                } else {
+                    listener.onProgress(0, totalCases, "Bài toán đơn giản, sử dụng so khớp chính xác (Skip Checker).");
                 }
-                entity.Checker checker = new entity.Checker(0, problem != null ? problem.getId() : 1, cleanMarkdown(checkerCodeRaw), "cpp");
-                dal.CheckerDAO checkerDAO = new dal.CheckerDAO();
-                int checkerId = checkerDAO.addChecker(checker);
-                if (checkerId > 0) checker.setId(checkerId);
 
                 // Thư mục tạm
                 Path tempDir = Files.createTempDirectory("auto_pipeline_");
@@ -242,7 +250,10 @@ public class EvaluationController {
                 }
 
                 if (problem != null && problem.getId() <= 0) {
-                    new dal.ProblemDAO().addProblem(problem);
+                    boolean success = new dal.ProblemDAO().addProblem(problem);
+                    if (!success) {
+                        throw new Exception("Không thể lưu bài tập vào Database! Vui lòng kiểm tra kết nối CSDL hoặc tiêu đề bài tập.");
+                    }
                 }
 
                 dal.TestCaseDAO dao = new dal.TestCaseDAO();
@@ -250,6 +261,8 @@ public class EvaluationController {
                 // Xóa testcase cũ của bài này trước khi sinh mới để tránh dồn ứ DB
                 if (problem != null && problem.getId() > 0) {
                     dao.deleteTestCasesByProblemId(problem.getId());
+                } else {
+                    throw new Exception("ID bài tập không hợp lệ (ID=0). Không thể lưu Testcase.");
                 }
 
                 int successCount = 0;
