@@ -13,7 +13,13 @@ public class ProblemDAO {
              PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
             pstmt.setString(1, problem.getTitle());
-            pstmt.setString(2, problem.getContent());
+            
+            // Ưu tiên lưu văn bản gốc chưa qua xử lý của AI vào CSDL, nếu không có mới dùng content của AI
+            String contentToSave = (problem.getOriginalRawText() != null && !problem.getOriginalRawText().isBlank()) 
+                                    ? problem.getOriginalRawText() 
+                                    : problem.getContent();
+            pstmt.setString(2, contentToSave);
+            
             pstmt.setInt(3, problem.getTimeLimitMs());
             pstmt.setInt(4, problem.getMemoryLimitMb());
             pstmt.setString(5, problem.getSource());

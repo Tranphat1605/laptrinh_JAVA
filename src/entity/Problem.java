@@ -7,6 +7,8 @@ public class Problem {
     private int timeLimitMs; // Giới hạn thời gian (milliseconds)
     private int memoryLimitMb; // Giới hạn bộ nhớ (Megabytes)
     private String source; // Nguồn: IOI, ICPC...
+    private String originalImageBase64; // Lưu trữ ảnh gốc dạng base64 nếu có
+    private String originalRawText; // Lưu lại đúng y xì đúc text người dùng nhập vào
 
     public Problem() {}
 
@@ -20,6 +22,12 @@ public class Problem {
     }
 
     // --- Getters và Setters ---
+    public String getOriginalImageBase64() { return originalImageBase64; }
+    public void setOriginalImageBase64(String originalImageBase64) { this.originalImageBase64 = originalImageBase64; }
+
+    public String getOriginalRawText() { return originalRawText; }
+    public void setOriginalRawText(String originalRawText) { this.originalRawText = originalRawText; }
+
     public int getId() { return id; }
     public void setId(int id) { this.id = id; }
 
@@ -54,7 +62,11 @@ public class Problem {
         if (memoryLimitMb > 0) {
             sb.append("Giới hạn bộ nhớ: ").append(memoryLimitMb).append(" MB\n");
         }
-        if (content != null && !content.isBlank()) {
+        
+        // Ưu tiên dùng lại nguyên vẹn text gốc do người dùng nhập để tránh AI tóm tắt làm mất mô tả
+        if (originalRawText != null && !originalRawText.isBlank()) {
+            sb.append("\nNội dung đề bài (Raw):\n").append(originalRawText);
+        } else if (content != null && !content.isBlank()) {
             sb.append("\nNội dung đề bài:\n").append(content);
         }
         return sb.toString().trim();
