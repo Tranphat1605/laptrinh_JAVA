@@ -85,16 +85,38 @@ Dưới đây là các vấn đề kỹ thuật lớn phát sinh trong quá trì
 
 ---
 
-## 👥 Phân Phối Vai Trò & Lộ Trình Phát Triển
+## 👥 Phân Phối Vai Trò & Bảng Phân Công Công Việc Chi Tiết
 
-### Phân Phân Vai Trò Chi Tiết (Nhóm 4 Người)
+### 👤 Vai Trò Lõi Của Thành Viên (Core Roles)
 
-| Thành Viên                     | Vai Trò & Tầng Đảm Nhiệm                          | Nhiệm Vụ Chính                                                                                                                                                                                                                                                                                                                                                                                 | Kỹ Năng Yêu Cầu                                                                |
-| :------------------------------- | :----------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------------------------- |
-| **Trần Văn Phát**            | **Backend & Tầng Dữ Liệu (Data Layer)**       | • Thiết kế lược đồ CSDL (`Problem`, `TestCase`, `SampleCode`, `Checker`...).`<br>`• Viết các lớp DAO thực hiện kết nối JDBC, thêm/sửa/xóa/truy vấn dữ liệu.`<br>`• Xây dựng các lớp Model POJO ánh xạ cơ sở dữ liệu.`<br>`• Quản lý file cấu hình, chuẩn bị dữ liệu mẫu phục vụ kiểm thử.                                             | Java Core, JDBC, Thiết kế CSDL quan hệ, SQL Server.                             |
-| **Nguyễn Duy Trọng Đức**    | **Tích hợp AI (AI Service Layer)**             | • Kết nối API AI (Groq, Gemini...), xử lý API Key, timeout và cơ chế gọi lại (retry).`<br>`• Thiết kế Prompt sinh dữ liệu kiểm thử (JSON), mã nguồn mẫu (AC/WA/TLE) và Checker.`<br>`• Parse phản hồi JSON từ AI thành các đối tượng Java tương ứng.`<br>`• Tích hợp OCR (Tess4J) hoặc model multimodal để xử lý ảnh đề bài.                  | HTTP Client, Xử lý JSON (Gson/Jackson), Prompt Engineering.                      |
-| **Nguyễn Văn Nam**            | **Thực Thi & Sandbox (Sandbox & Evaluation)**   | • Dựng môi trường chạy an toàn (`ProcessBuilder`) hỗ trợ đa ngôn ngữ (C++, Java, Python...).`<br>`• Quản lý tiến trình: giới hạn thời gian (Timeout), dung lượng bộ nhớ, bắt lỗi ngoại lệ.`<br>`• Thực thi chấm thử các mã lỗi (WA, TLE) để đánh giá độ mạnh của testcase.`<br>`• Tích hợp cơ chế so khớp kết quả bằng file Checker. | System Processes, Luồng I/O, Multi-threading, hiểu biết về trình biên dịch. |
-| **Trương Đình Chiến** | **Giao Diện & Điều Phối (GUI & Controller)** | • Phát triển toàn bộ giao diện người dùng (JavaFX hoặc Swing) đẹp mắt và mượt mà.`<br>`• Thiết kế các form nhập đề, bảng hiển thị testcase, vùng chọn mã mẫu và hiển thị báo cáo.`<br>`• Viết Controller điều phối luồng: xử lý tác vụ nền bất đồng bộ để tránh đơ giao diện (`Platform.runLater`).                                | JavaFX/Swing, Mô hình MVC, Thiết kế UI/UX, Đa luồng trong UI.                |
+* 💾 **Trần Văn Phát:** Backend & Tầng Dữ Liệu (Data Layer) - Chịu trách nhiệm thiết kế CSDL, quản lý kết nối và các lớp DAO.
+* 🤖 **Nguyễn Duy Trọng Đức:** Tích hợp AI (AI Service Layer) - Chịu trách nhiệm thiết kế Prompt, xử lý API và parse JSON từ AI.
+* 🔒 **Nguyễn Văn Nam:** Thực Thi & Sandbox (Sandbox & Evaluation) - Chịu trách nhiệm dựng môi trường chạy code bảo mật, xử lý I/O và Checker.
+* 🎨 **Trương Đình Chiến:** Giao Diện & Điều Phối (GUI & Controller) - Chịu trách nhiệm thiết kế UI mượt mà và viết lớp Controller điều phối tác vụ bất đồng bộ.
+
+### 📋 Bảng Phân Công Công Việc Chi Tiết
+
+| Công Việc Thành Phần | Trần Văn Phát | Nguyễn Duy Trọng Đức | Nguyễn Văn Nam | Trương Đình Chiến |
+| :--- | :---: | :---: | :---: | :---: |
+| Thiết kế lược đồ CSDL quan hệ tối ưu (`Problem`, `TestCase`, `SampleCode`, `Checker`...) | `[x]` | - | - | - |
+| Thiết lập kết nối CSDL (JDBC Utility) & quản lý file cấu hình kết nối | `[x]` | - | - | - |
+| Xây dựng các lớp thực thể (Model POJO) để ánh xạ trực tiếp các bảng CSDL | `[x]` | - | - | - |
+| Hiện thực hóa các lớp DAO thực hiện các truy vấn dữ liệu CRUD | `[x]` | - | - | - |
+| Chuẩn bị dữ liệu mẫu và viết script nạp (seed data) ban đầu | `[x]` | - | - | - |
+| Thiết lập kết nối API AI (Groq, Gemini...) và cơ chế xử lý API Key, Timeout | - | `[x]` | - | - |
+| Thiết kế Prompts tối ưu để AI sinh Testcase dạng JSON có độ bao phủ cao | - | `[x]` | - | - |
+| Thiết kế Prompts yêu cầu AI sinh mã mẫu (AC chuẩn, WA biên, TLE vét cạn) | - | `[x]` | - | - |
+| Viết bộ Parser chuyển đổi phản hồi JSON từ AI thành các thực thể Java tương ứng | - | `[x]` | - | - |
+| Nghiên cứu và tích hợp OCR (Tess4J) hoặc model multimodal để nhận diện ảnh đề bài | - | `[x]` | - | - |
+| Xây dựng Sandbox chạy mã nguồn đa ngôn ngữ (C++, Java, Python...) qua `ProcessBuilder` | - | - | `[x]` | - |
+| Giải quyết kẹt tiến trình (Deadlock Buffer OS) bằng redirection file tạm & quản lý Timeout | - | - | `[x]` | - |
+| Xây dựng bộ chấm điểm so khớp kết quả đầu ra (Checker) và tích hợp Custom Checker | - | - | `[x]` | - |
+| Chấm thử các mã lỗi (WA, TLE) để xuất báo cáo đánh giá độ mạnh của bộ testcase | - | - | `[x]` | - |
+| Thiết kế Layout giao diện chính hiện đại (Dashboard, Sidebar, Tabs điều hướng) | - | - | - | `[x]` |
+| Thiết kế Form nhập đề bài (hỗ trợ nhập văn bản thô hoặc tải lên ảnh đề bài) | - | - | - | `[x]` |
+| Thiết kế bảng hiển thị danh sách Testcase trực quan & biểu đồ phân phối dữ liệu | - | - | - | `[x]` |
+| Thiết kế bảng chọn mã nguồn mẫu (AC, WA, TLE) và vùng hiển thị báo cáo độ bao phủ | - | - | - | `[x]` |
+| Xây dựng Controller xử lý bất đồng bộ (`SwingWorker` / `Platform.runLater`), tránh đơ giao diện | - | - | - | `[x]` |
 
 ### Lộ Trình Thực Hiện Đề Xuất (6 Tuần)
 
