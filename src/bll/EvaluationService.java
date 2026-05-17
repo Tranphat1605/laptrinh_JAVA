@@ -23,7 +23,7 @@ public class EvaluationService {
         EvaluationReport report = new EvaluationReport();
 
         String checkerExePath = null;
-        if (checker != null) {
+        if (checker != null && checker.isValid()) {
             ExecutionResult compileResult = sandboxService.compileChecker(checker.getCode());
             if (!compileResult.getStatus().equals("SUCCESS")) {
                 report.addWarning("Biên dịch Custom Checker thất bại: " + compileResult.getError());
@@ -159,7 +159,7 @@ public class EvaluationService {
             }
 
             String checkerExePath = null;
-            if (checker != null) {
+            if (checker != null && checker.isValid()) {
                 ExecutionResult checkerCompileResult = sandboxService.compileChecker(checker.getCode());
                 if (!checkerCompileResult.getStatus().equals("SUCCESS")) {
                     return new ExecutionResult("CE", "", "Lỗi biên dịch Custom Checker: " + checkerCompileResult.getError(), 0, checkerCompileResult.getExitCode());

@@ -79,6 +79,16 @@ public class AIService {
         p.setMemoryLimitMb(256);
         p.setSource("AI Generated");
 
+        // Lưu lại dữ liệu gốc tương ứng với cách gửi (Text hay Ảnh)
+        if (imageFile == null || !imageFile.exists()) {
+            p.setOriginalRawText(text); // Phân tích từ Text: Lưu nguyên vẹn text gốc của người dùng
+        } else {
+            p.setOriginalRawText(null); // Phân tích từ Ảnh: CSDL sẽ tự động lấy content do AI phân tích cấu trúc
+            if (imageBase64 != null) {
+                p.setOriginalImageBase64(imageBase64);
+            }
+        }
+
         try {
             // CẢI TIẾN: Dùng Regex để tìm khối JSON thực sự trong đống text AI trả về
             String jsonStr = responseMessage;

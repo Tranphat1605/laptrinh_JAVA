@@ -386,7 +386,9 @@ public class EvaluationController {
     /** Trả về Checker thực nếu checkerCode hợp lệ, ngược lại null. */
     private Checker buildChecker(String checkerCode) {
         if (isBlank(checkerCode)) return null;
-        return new Checker(cleanMarkdown(checkerCode), "cpp");
+        Checker checker = new Checker(cleanMarkdown(checkerCode), "cpp");
+        if (!checker.isValid()) return null;
+        return checker;
     }
 
     /** Xây dựng danh sách SampleCode từ code thực. */

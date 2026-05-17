@@ -34,4 +34,31 @@ public class Checker {
 
     public String getLanguage() { return language; }
     public void setLanguage(String language) { this.language = language; }
+
+    /**
+     * Kiểm tra xem mã nguồn Checker có hợp lệ để biên dịch hay không.
+     * Tránh biên dịch các dòng comment placeholder của hệ thống hoặc mã nguồn không có hàm main().
+     */
+    public boolean isValid() {
+        if (code == null) return false;
+        String trimmed = code.trim();
+        if (trimmed.isEmpty()) return false;
+        
+        // Bỏ qua các placeholder hoặc trạng thái chờ của hệ thống
+        if (trimmed.startsWith("// [HỆ THỐNG]") || 
+            trimmed.startsWith("// [SYSTEM]") || 
+            trimmed.startsWith("// ⏳") || 
+            trimmed.startsWith("// Đang") || 
+            trimmed.startsWith("// ❌ Lỗi")) {
+            return false;
+        }
+        
+        // Mã nguồn C++ checker bắt buộc phải có hàm main() để làm điểm khởi chạy
+        if (!trimmed.contains("main(") && !trimmed.contains("main (")) {
+            return false;
+        }
+        
+        return true;
+    }
 }
+
