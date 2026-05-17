@@ -1,106 +1,131 @@
-## **Phân chia vai trò (4 người)**
+# 🚀 DCPN - Hệ Thống Tự Động Sinh & Đánh Giá Testcase Bằng AI
 
-### **1. Thành viên A – Thiết kế CSDL & Tầng truy xuất dữ liệu (Backend/Data Layer)**
-
-**Nhiệm vụ chính:**
-
-* Thiết kế lược đồ CSDL (các bảng `problems`, `testcases`, `sample_codes`, `checkers`, `ai_logs`...).
-* Cài đặt kết nối CSDL (JDBC), viết các lớp DAO để thực hiện thêm/sửa/xóa/truy vấn.
-* Xây dựng các class Model (POJO) ánh xạ dữ liệu.
-* Chuẩn bị dữ liệu mẫu cho nhóm test.
-* Quản lý file cấu hình (CSDL, API key...).
-
-**Kỹ năng cần:** Java core, JDBC, thiết kế CSDL quan hệ, SQL.
-
-**Giao tiếp với nhóm:** Cung cấp interface (method) cho các thành viên khác gọi để lưu/lấy dữ liệu. Sớm hoàn thiện các hàm cơ bản để các nhóm khác không bị chặn.
+*Một đường ống (pipeline) tự động hóa quy trình kiểm thử và đánh giá mã nguồn lập trình sử dụng sức mạnh của Trí tuệ Nhân tạo.*
 
 ---
 
-### **2. Thành viên B – Tích hợp AI (AI Service)**
+## 📌 Tổng Quan Dự Án
 
-**Nhiệm vụ chính:**
+Dự án **DCPN** là giải pháp toàn diện giúp tự động hóa quy trình kiểm thử mã nguồn cho các bài tập lập trình (Competitive Programming/Computer Science). Hệ thống sử dụng các mô hình AI tiên tiến (như Groq, Gemini, OpenAI) để:
 
-* Kết nối API của AI (OpenAI, Gemini...), quản lý API key, xử lý timeout, retry.
-* Thiết kế prompt cho từng tác vụ:
-  * Phân tích đề bài (từ text hoặc ảnh) → trích xuất yêu cầu.
-  * Sinh bộ test case (input/output) theo định dạng cấu trúc (JSON).
-  * Sinh checker (nếu cần).
-  * Tự động sinh code mẫu AC/WA/TLE khi người dùng không cung cấp.
-* Parse phản hồi JSON từ AI thành các object của hệ thống (Testcase, Checker...).
-* Nếu đề bài là ảnh: sử dụng OCR (Tess4J) hoặc gửi thẳng đến model multimodal để nhận text.
-* Cung cấp service class (ví dụ `AIService`) cho GUI gọi.
-
-**Kỹ năng cần:** Gọi REST API (HttpClient), xử lý JSON (Jackson/Gson), prompt engineering cơ bản, kiên nhẫn với việc thử và tinh chỉnh prompt.
-
-**Giao tiếp:** Nhận yêu cầu phân tích đề từ GUI (thông qua controller chung) và trả về danh sách test case, checker, code mẫu đã parse. Lưu kết quả vào DB thông qua DAO của A.
+* Phân tích yêu cầu đề bài (từ văn bản hoặc hình ảnh đề bài).
+* Tự động sinh bộ dữ liệu kiểm thử (testcases) cực mạnh và đa dạng.
+* Tạo mã nguồn mẫu hoàn chỉnh (AC - Đúng tuyệt đối, WA - Sai thuật toán biên, TLE - Vét cạn quá thời gian).
+* Biên dịch và chấm điểm mã nguồn nộp vào thông qua một sandbox thực thi bảo mật, an toàn và tối ưu hiệu năng.
 
 ---
 
-### **3. Thành viên C – Module chấm & kiểm tra code (Sandbox & Evaluation)**
+## 🚀 Các Tính Năng & Cải Tiến Nổi Bật
 
-**Nhiệm vụ chính:**
+### 1. Phá Bỏ Giới Hạn Cứng Bộ Testcase
 
-* Xây dựng môi trường thực thi an toàn cho code mẫu:
-  * Dùng `ProcessBuilder` để biên dịch + chạy code (Java/Python/C++... tùy chọn).
-  * Giới hạn thời gian chạy (timeout), bộ nhớ (nếu làm trên Linux).
-  * Bắt output, lỗi, thoát đúng cách.
-* Phát triển logic đánh giá test case dựa trên code mẫu:
-  * Với mỗi code mẫu (AC, WA, TLE), chạy qua toàn bộ test case, ghi nhận pass/fail.
-  * Từ kết quả đó, đưa ra nhận xét: test case có sai không? Có yếu không? (ví dụ code WA lại pass → test case yếu).
-* Hỗ trợ chạy checker: Nếu có checker, thực hiện so sánh output bằng checker thay vì so khớp chính xác.
-* Xây dựng service `EvaluationService` để GUI gọi.
+* **Trước đây:** Hệ thống bị giới hạn chạy đúng 2 Testcase mẫu được gán thủ công trong mã nguồn (`buildMockTestCases()`).
+* **Hiện tại:** Đã chuyển đổi thành công sang kiến trúc tự động hóa hoàn chỉnh. Người dùng có thể cấu hình sinh và đánh giá số lượng testcase tùy ý (ví dụ: 20, 50, 100...) thông qua phương thức điều phối `runAutomatedEvaluation`.
 
-**Kỹ năng cần:** Làm việc với Process, luồng I/O, quản lý tiến trình, xử lý đa luồng để không treo giao diện, hiểu biết sơ lược về các ngôn ngữ lập trình cần hỗ trợ chấm.
+### 2. Chiến Lược Bao Phủ Dữ Liệu Thông Minh (Coverage Strategy)
 
-**Giao tiếp:** Lấy test case từ DB (qua A) và nhận code mẫu từ người dùng hoặc do AI sinh ra (từ B). Trả về báo cáo chi tiết cho GUI.
+Hệ thống không sinh dữ liệu ngẫu nhiên vô nghĩa mà áp dụng công thức phân bổ dữ liệu khoa học giúp tối ưu hóa khả năng bắt lỗi mã nguồn:
+
+* **20% Edge Cases (Biên đặc biệt):** Bẫy các ranh giới nhạy cảm như mảng rỗng, giá trị $N = 0$, số cực âm, số cực lớn...
+* **20% Max Cases (Giới hạn chịu tải):** Sử dụng các testcase có kích thước dữ liệu lớn tối đa ($N = 10^5, 10^6$) nhằm bóp nghẹt thuật toán kém tối ưu $O(N^2)$, ép lộ diện lỗi TLE (Quá thời gian) hoặc MLE (Tràn bộ nhớ).
+* **60% Random Cases (Ngẫu nhiên thông thường):** Kiểm tra tính đúng đắn và tính tổng quát trong điều kiện bình thường.
+
+### 3. Tích Hợp Thư Viện Thi Đấu Chuẩn `testlib.h`
+
+* **Thách thức:** AI chỉ sinh mã nguồn C++ sinh dữ liệu (Generator) dưới dạng văn bản thô, không thể thực thi trực tiếp và thường thiếu thư viện hỗ trợ sinh số ngẫu nhiên chuẩn hóa.
+* **Giải pháp:** Đã tải và tích hợp thành công thư viện chuẩn `testlib.h` vào thư mục `lib`.
+* **Cơ chế Workspace Tạm (Temp Workspace):** Hệ thống tự động gom `testlib.h`, mã `gen.cpp` (Generator), và `ac.cpp` (Solution chuẩn) vào thư mục tạm, sau đó gọi trình biên dịch `g++ -O2 -std=c++17` để sinh trực tiếp file chạy `.exe` tối ưu và an toàn.
+
+### 4. Động Cơ Đánh Giá Sức Mạnh Bộ Testcase (Testcase Strength Engine)
+
+Quy trình tự hành khép kín (End-to-End Lifecycle) cực mượt của `EvaluationController`:
+
+```mermaid
+graph TD
+    A[AI Sinh Generator & Code AC] --> B[Java Biên Dịch ra File Thực Thi .exe]
+    B --> C[Chạy Generator để tạo dữ liệu Input]
+    C --> D[Ném Input vào Code AC để lấy Expected Output]
+    D --> E[Lưu cặp dữ liệu Input/Output thành Testcase vào CSDL]
+    E --> F[AI sinh thêm Code lỗi: WA & TLE]
+    F --> G[Chạy Sandbox so sánh kết quả thực thi các Code]
+    G --> H{Đánh Giá Testcase}
+    H -->|Giết được Code WA/TLE| I[Đánh dấu Strong Target]
+    H -->|Để lọt Code lỗi| J[Đánh dấu Weak Testcase]
+```
+
+*Sandbox lõi (`BaseCodeExecutor`) được trang bị tính năng chống vòng lặp vô hạn và chống tràn bộ nhớ.*
 
 ---
 
-### **4. Thành viên D – Giao diện người dùng & Tích hợp hệ thống (GUI + Controller)**
+## 🛠️ Nhật Ký Sửa Lỗi & Tối Ưu Hệ Thống
 
-**Nhiệm vụ chính:**
+Dưới đây là các vấn đề kỹ thuật lớn phát sinh trong quá trình vận hành và giải pháp tối ưu đã được triển khai:
 
-* Thiết kế và lập trình toàn bộ giao diện (JavaFX hoặc Swing) bao gồm:
-  * Form nhập đề bài (text box + nút chọn file ảnh).
-  * Bảng hiển thị danh sách test case (có thể sửa/xóa).
-  * Vùng nhập code mẫu (chọn loại AC/WA/TLE).
-  * Nút “Phân tích bằng AI” để gọi AI service.
-  * Hiển thị kết quả đánh giá (báo cáo dạng cây/bảng).
-* Viết lớp Controller điều phối luồng:
-  * Khi người dùng nhấn nút, controller gọi `AIService`, `EvaluationService`, `DAO` một cách tuần tự/đa luồng.
-  * Đảm bảo cập nhật giao diện an toàn từ luồng phụ (Platform.runLater...).
-* Xử lý sự kiện, validate dữ liệu nhập, hiển thị thông báo lỗi.
-* Thiết kế trải nghiệm người dùng mượt mà (loading indicator khi gọi AI/chạy code).
+### 1. Lỗi Biên Dịch C++ Generator do Thiếu Thư Viện Dòng Lệnh
 
-**Kỹ năng cần:** JavaFX/Swing, MVC, đa luồng trong GUI, khả năng ráp nối các module.
+* **Vấn đề:** Trình biên dịch báo lỗi do mã nguồn sinh sinh dữ liệu từ AI thiếu các chỉ thị tiền xử lý cơ bản, không nhận diện được `cout`, `endl`.
+* **Khắc phục:** Điều chỉnh System Prompt trong [AIService.java](file:///d:/Code/Java/laptrinh_JAVA/src/bll/AIService.java) ép buộc AI luôn phải đính kèm đầy đủ thư viện `#include <iostream>` và không gian tên `using namespace std;` lên đầu mọi file Generator.
 
-**Giao tiếp:** Là người dùng trực tiếp service của B và C, dùng DAO của A để load/save dữ liệu. Cần thống nhất interface (method signature) sớm với các thành viên khác.
+### 2. Quản Lý Cấu Hình API Key
+
+* **Vấn đề:** Nơi cấu hình API Key dịch vụ Groq phục vụ tính năng AI chưa rõ ràng.
+* **Khắc phục:** Cấu hình API Key được thiết lập trực tiếp khi khởi tạo `TeacherController` tại [TeacherFrame.java](file:///d:/Code/Java/laptrinh_JAVA/src/gui/DashboardFrame.java). Người dùng chỉ cần thay chuỗi `"gsk_..."` bằng API Key thực tế để vận hành.
+
+### 3. Lỗi Hết Thời Gian Biên Dịch (Compile TIMEOUT)
+
+* **Vấn đề:** Khi biên dịch mã nguồn C++ có nhúng thư viện đồ sộ `testlib.h` kèm cờ tối ưu `-O2`, trình biên dịch `g++` tốn nhiều thời gian phân tích, vượt quá giới hạn 15 giây mặc định dẫn đến lỗi TIMEOUT.
+* **Khắc phục:** Nâng giới hạn thời gian chờ biên dịch trong `EvaluationController.java` từ 15 giây lên **60 giây**.
+
+### 4. Lỗi Kẹt Tiến Trình (Deadlock) & Treo Hệ Thống Khi Chạy Testcase Siêu Lớn ($10^6, 10^9$)
+
+* **Vấn đề:** Gặp hiện tượng deadlock bộ đệm hệ điều hành (OS Buffer Overflow). Tiến trình C++ in ra màn hình lượng dữ liệu khổng lồ vượt quá sức chứa bộ đệm OS (chỉ khoảng 4KB - 8KB) và đứng đợi Java đọc; trong khi đó, Java lại dùng lệnh chặn `.waitFor()` chờ C++ chạy xong mới bắt đầu đọc dữ liệu. Hai tiến trình đứng chờ nhau vĩnh viễn gây treo hệ thống.
+* **Khắc phục:**
+  1. Tăng thời gian thực thi tối đa cho mỗi tiến trình chạy testcase lên **300 giây** (5 phút).
+  2. Thay đổi cơ chế I/O trong `EvaluationController.java`: Sử dụng tính năng Redirect Output/Input của `ProcessBuilder` ghi trực tiếp dữ liệu vào file vật lý tạm thời trên ổ cứng (`input_i.txt`, `output_i.txt`). Java chỉ tiến hành đọc file sau khi tiến trình C++ kết thúc và giải phóng tài nguyên hệ thống an toàn.
 
 ---
 
-## **Cách phối hợp và mốc thời gian đề xuất**
+## 👥 Phân Phối Vai Trò & Lộ Trình Phát Triển
 
-1. **Tuần 1:** Cả nhóm cùng thống nhất kiến trúc, thiết kế CSDL (A chủ trì), chọn giao thức giao tiếp giữa các module (interface rõ ràng). A bắt đầu code DAO, B tạo tài khoản AI và test prompt thô, C dựng sandbox đơn giản, D vẽ prototype GUI.
-2. **Tuần 2-3:** A hoàn thiện DAO, B hoàn thành parse AI response ra object, C hoàn thành chạy được code và so sánh output, D code GUI phần nhập liệu cơ bản.
-3. **Tuần 4:** Tích hợp dây chuyền nhỏ: GUI gọi AI → nhận test case → lưu DB → hiển thị. C kiểm thử sandbox với test case giả.
-4. **Tuần 5:** Tích hợp module đánh giá: GUI nhập code mẫu → chạy qua test case → hiện báo cáo.
-5. **Tuần 6:** Kiểm thử toàn bộ, hoàn thiện giao diện, xử lý ngoại lệ, làm tài liệu.
+### Phân Phân Vai Trò Chi Tiết (Nhóm 4 Người)
 
-Phân công này cho phép A, B, C làm việc song song gần như độc lập sau khi thống nhất interface, còn D sẽ bắt đầu sau nhưng có thể dùng dữ liệu giả để thiết kế giao diện trước khi có service thật. Nếu có thành viên mạnh về full-stack, có thể linh hoạt đổi vai trò. Chúc nhóm bạn triển khai suôn sẻ!
+| Thành Viên                     | Vai Trò & Tầng Đảm Nhiệm                          | Nhiệm Vụ Chính                                                                                                                                                                                                                                                                                                                                                                                 | Kỹ Năng Yêu Cầu                                                                |
+| :------------------------------- | :----------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------------------------- |
+| **Trần Văn Phát**            | **Backend & Tầng Dữ Liệu (Data Layer)**       | • Thiết kế lược đồ CSDL (`Problem`, `TestCase`, `SampleCode`, `Checker`...).`<br>`• Viết các lớp DAO thực hiện kết nối JDBC, thêm/sửa/xóa/truy vấn dữ liệu.`<br>`• Xây dựng các lớp Model POJO ánh xạ cơ sở dữ liệu.`<br>`• Quản lý file cấu hình, chuẩn bị dữ liệu mẫu phục vụ kiểm thử.                                             | Java Core, JDBC, Thiết kế CSDL quan hệ, SQL Server.                             |
+| **Nguyễn Duy Trọng Đức**    | **Tích hợp AI (AI Service Layer)**             | • Kết nối API AI (Groq, Gemini...), xử lý API Key, timeout và cơ chế gọi lại (retry).`<br>`• Thiết kế Prompt sinh dữ liệu kiểm thử (JSON), mã nguồn mẫu (AC/WA/TLE) và Checker.`<br>`• Parse phản hồi JSON từ AI thành các đối tượng Java tương ứng.`<br>`• Tích hợp OCR (Tess4J) hoặc model multimodal để xử lý ảnh đề bài.                  | HTTP Client, Xử lý JSON (Gson/Jackson), Prompt Engineering.                      |
+| **Nguyễn Văn Nam**            | **Thực Thi & Sandbox (Sandbox & Evaluation)**   | • Dựng môi trường chạy an toàn (`ProcessBuilder`) hỗ trợ đa ngôn ngữ (C++, Java, Python...).`<br>`• Quản lý tiến trình: giới hạn thời gian (Timeout), dung lượng bộ nhớ, bắt lỗi ngoại lệ.`<br>`• Thực thi chấm thử các mã lỗi (WA, TLE) để đánh giá độ mạnh của testcase.`<br>`• Tích hợp cơ chế so khớp kết quả bằng file Checker. | System Processes, Luồng I/O, Multi-threading, hiểu biết về trình biên dịch. |
+| **Trương Đình Chiến** | **Giao Diện & Điều Phối (GUI & Controller)** | • Phát triển toàn bộ giao diện người dùng (JavaFX hoặc Swing) đẹp mắt và mượt mà.`<br>`• Thiết kế các form nhập đề, bảng hiển thị testcase, vùng chọn mã mẫu và hiển thị báo cáo.`<br>`• Viết Controller điều phối luồng: xử lý tác vụ nền bất đồng bộ để tránh đơ giao diện (`Platform.runLater`).                                | JavaFX/Swing, Mô hình MVC, Thiết kế UI/UX, Đa luồng trong UI.                |
 
-Tables DB, run on SSMS
+### Lộ Trình Thực Hiện Đề Xuất (6 Tuần)
 
--- 1. Xóa các bảng cũ nếu tồn tại (theo thứ tự để không bị lỗi khóa ngoại)
+* **[ ] Tuần 1 (Thiết kế & Khởi tạo):** Thống nhất kiến trúc hệ thống và giao diện API (Interfaces). A thiết kế CSDL, B thử nghiệm Prompts, C dựng Sandbox đơn giản, D thiết kế mockup giao diện.
+* **[ ] Tuần 2 - 3 (Hiện thực hóa core):** A hoàn thiện DAO, B hoàn tất parser JSON từ AI, C viết xong cơ chế chạy code và so khớp output, D code giao diện nhập liệu cơ bản.
+* **[ ] Tuần 4 (Tích hợp dây chuyền 1):** Tích hợp chuỗi chức năng: GUI ➔ Gọi AI sinh testcase ➔ Lưu DB ➔ Hiển thị lên giao diện. C kiểm thử Sandbox với dữ liệu giả lập.
+* **[ ] Tuần 5 (Tích hợp dây chuyền 2):** Hoàn thiện module đánh giá: Nhập code mẫu ➔ Thực thi qua bộ testcase sinh ra ➔ Xuất báo cáo độ mạnh/yếu trực quan.
+* **[ ] Tuần 6 (Đánh giá & Hoàn thiện):** Kiểm thử tích hợp toàn diện (UAT), xử lý triệt để các trường hợp biên và lỗi kết nối, đóng gói ứng dụng và viết tài liệu hướng dẫn.
 
+---
+
+## 🗃️ Thiết Kế Cơ Sở Dữ Liệu (DDL - SSMS)
+
+Dưới đây là kịch bản SQL Server Management Studio (SSMS) để khởi tạo toàn bộ cấu trúc dữ liệu cho dự án:
+
+```sql
+-- 1. Tạo Database mới và làm sạch các bảng cũ nếu đã tồn tại
 CREATE DATABASE DCPNDB;
+GO
+USE DCPNDB;
+GO
+
 DROP TABLE IF EXISTS EvaluationResult;
 DROP TABLE IF EXISTS Submission;
 DROP TABLE IF EXISTS TestCase;
 DROP TABLE IF EXISTS SampleCode;
 DROP TABLE IF EXISTS Checker;
 DROP TABLE IF EXISTS Problem;
+GO
 
--- 2. Tạo mới toàn bộ bảng
+-- 2. Tạo Bảng Problem (Lưu thông tin đề bài)
 CREATE TABLE Problem (
   id INT IDENTITY(1,1) PRIMARY KEY,
   title NVARCHAR(512) NOT NULL,
@@ -110,6 +135,7 @@ CREATE TABLE Problem (
   source NVARCHAR(256)
 );
 
+-- 3. Tạo Bảng TestCase (Lưu bộ testcase được sinh tự động hoặc gán tay)
 CREATE TABLE TestCase (
   id INT IDENTITY(1,1) PRIMARY KEY,
   problemId INT NOT NULL,
@@ -120,6 +146,7 @@ CREATE TABLE TestCase (
   CONSTRAINT FK_TestCase_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE
 );
 
+-- 4. Tạo Bảng Submission (Quản lý các bài nộp code thi đấu)
 CREATE TABLE Submission (
   id INT IDENTITY(1,1) PRIMARY KEY,
   problemId INT NOT NULL,
@@ -130,6 +157,7 @@ CREATE TABLE Submission (
   CONSTRAINT FK_Submission_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE
 );
 
+-- 5. Tạo Bảng EvaluationResult (Lưu chi tiết kết quả chạy từng testcase)
 CREATE TABLE EvaluationResult (
   id INT IDENTITY(1,1) PRIMARY KEY,
   submissionId INT NOT NULL,
@@ -141,6 +169,7 @@ CREATE TABLE EvaluationResult (
   CONSTRAINT FK_Eval_TestCase FOREIGN KEY (testcaseId) REFERENCES TestCase(id) ON DELETE NO ACTION
 );
 
+-- 6. Tạo Bảng SampleCode (Mã nguồn AC/WA/TLE dùng để kiểm tra độ mạnh bộ testcase)
 CREATE TABLE SampleCode (
   id INT IDENTITY(1,1) PRIMARY KEY,
   problemId INT,
@@ -150,6 +179,7 @@ CREATE TABLE SampleCode (
   CONSTRAINT FK_SampleCode_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE
 );
 
+-- 7. Tạo Bảng Checker (Mã nguồn chương trình chấm điểm đặc biệt)
 CREATE TABLE Checker (
   id INT IDENTITY(1,1) PRIMARY KEY,
   problemId INT,
@@ -157,47 +187,4 @@ CREATE TABLE Checker (
   language NVARCHAR(64),
   CONSTRAINT FK_Checker_Problem FOREIGN KEY (problemId) REFERENCES Problem(id) ON DELETE CASCADE
 );
-//thay đổi tóm tắt ngữ cảnh
-
-1. Phá bỏ giới hạn Testcase cứng (Hardcoded)
-   Trước đây: Hệ thống chỉ chạy đúng 2 Testcase được gán tay trong hàm buildMockTestCases().
-   Hiện tại: Chuyển đổi thành công sang kiến trúc tự động, cho phép truyền vào con số bất kỳ (ví dụ: 20, 50, hay 100 testcase) thông qua hàm runAutomatedEvaluation.
-2. Thuật toán bao phủ toàn diện (Coverage Strategy)
-   Hệ thống không còn sinh testcase vô tri nữa, mà tự động áp dụng công thức phân bổ thông minh:
-   20% Edge Cases (Biên dễ/khó): Bẫy các ranh giới như mảng rỗng, N=0, số cực âm...
-   20% Max Cases (Giới hạn chịu tải): Nhồi N tối đa (105105,106106) nhằm bóp nghẹt thuật toánO(n2)O(n2), ép lòi ra lỗi TLE (Quá thời gian) hoặc MLE (Tràn bộ nhớ).
-   60% Random Cases: Testcase phổ thông để kiểm tra độ đúng đắn tổng quát.
-3. Giải quyết bài toán Biên dịch nội bộ (Compilation & testlib.h)
-   Vấn đề: AI chỉ trả về Text C++, không thể chạy trực tiếp, lại còn thiếu thư viện thi đấu.
-   Giải quyết: Đã tải và tích hợp thành công thư viện chuẩn testlib.h vào thư mục lib.
-   Cơ chế tạm thời (Temp Workspace): Mỗi lần chạy, Java sẽ tự gom testlib.h, mã gen.cpp (Generator) và ac.cpp (Code giải chuẩn) vào một thư mục tạm, dùng lệnh g++ -O2 -std=c++17 để biên dịch trực tiếp ra mã máy .exe.
-4. Chốt luồng Đánh giá sức mạnh (Testcase Strength Engine) cực mượt
-   Chúng ta đã hoàn thiện 1 vòng đời (Lifecycle) tự hành của Evaluation Controller:
-
-[AI] Sinh Code Sinh dữ liệu (Generator).
-[AI] Sinh Code Mẫu AC (Đúng tuyệt đối).
-[Java Backend] Biên dịch 2 code trên ra .exe.
-[Vòng lặp siêu tốc] Ép Generator đẻ ra Input -> Ném Input vào Code AC để moi ra Expected Output -> Gom thành Testcase lưu CSDL.
-[AI] Ép AI đẻ ra thêm 2 Code độc hại: WA (Sai biên) và TLE (Lặp vét cạn).
-[Sandbox] Bơm toàn bộ đống code và testcase vào hệ thống Sandbox lõi (BaseCodeExecutor) với chống vòng lặp vô hạn & chống tràn buffer để đánh giá xem: Testcase nào giết được bài WA/TLE thì phong là "Strong Target", Testcase nào để lọt thì bị trừ điểm
-Dưới đây là tóm tắt toàn bộ các vấn đề hệ thống gặp phải và cách chúng ta đã xử lý trong phiên làm việc này:
-
-1. Lỗi biên dịch C++ Generator (Thiếu thư viện):
-
-Vấn đề: Khi sinh testcase, file C++ báo lỗi không nhận diện được cout và endl.
-Xử lý: Cập nhật Prompt của AI trong AIService.java để ép buộc AI luôn phải thêm #include <iostream> và using namespace std; ở đầu file Generator.
-2. Vị trí cấu hình API Key:
-
-Vấn đề: Thay đổi API Key (Groq) cho chức năng AI.
-Xử lý: Cấu hình được đặt cứng tại file TeacherFrame.java (dòng khởi tạo TeacherController). Hướng dẫn bạn thay chuỗi "gsk_..." thành key mới của bạn.
-3. Lỗi TIMEOUT khi biên dịch code (Compile):
-
-Vấn đề: Trình biên dịch C++ (g++) có kèm cờ -O2 phân tích thư viện testlib.h mất nhiều thời gian, giới hạn 15 giây bị quá hạn khiến tiến trình bị ép đóng (báo lỗi TIMEOUT ở bước Compile).
-Xử lý: Nâng thời gian chờ ở bước biên dịch trong EvaluationController.java từ 15 giây lên 60 giây.
-4. Lỗi kẹt tiến trình (Deadlock) và TIMEOUT khi chạy testcase lớn (1e6, 1e9):
-
-Vấn đề: Khi sinh dữ liệu siêu lớn, hệ thống bị treo mãi ở 1 testcase và văng lỗi TIMEOUT (hoặc đứng im). Nguyên nhân là do Deadlock bộ đệm hệ điều hành (OS Buffer): lệnh C++ in quá nhiều text làm tràn bộ đệm (chỉ có khoảng 4-8KB) và đứng chờ Java đọc, nhưng Java lại đang dùng lệnh .waitFor() để chờ C++ chạy xong mới đọc. Kết quả là 2 bên chờ nhau vĩnh viễn.
-Xử lý:
-Nâng thời gian chờ thực thi (execution) lên tối đa 5 phút (300 giây).
-Thay đổi cơ chế I/O trong EvaluationController.java: Chuyển từ việc luân chuyển dữ liệu qua RAM/Buffer sang việc ghi thẳng xuống ổ cứng dưới dạng các file vật lý (input_i.txt, output_i.txt) thông qua redirectOutput và redirectInput. Sau khi quá trình C++ kết thúc an toàn, Java mới đọc nội dung từ file để lưu vào Database.
-Các cải tiến này giúp hệ thống của bạn hoạt động mượt mà, chịu tải được bộ dữ liệu khổng lồ chuẩn thi đấu mà không lo bị ngốn vi xử lý hay xung đột bộ nhớ.
+```
